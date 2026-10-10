@@ -461,8 +461,8 @@ class ESPHomeStudioPanel extends HTMLElement {
       this._left.append(h("div", { class: "card" }, this.fatal));
       return;
     }
-    this._left.append(this._secWizard(), this._secProject(), this._importOpen && !this.simple ? this._secImport() : null, this._importReport ? this._secReport() : null,
-      this._secDevice(), this._secNetwork(), this.simple ? null : this._secPins(), this._secComponents(), this._secNext());
+    this._left.append(...[this._secWizard(), this._secProject(), this._importOpen && !this.simple ? this._secImport() : null, this._importReport ? this._secReport() : null,
+      this._secDevice(), this._secNetwork(), this.simple ? null : this._secPins(), this._secComponents(), this._secNext()].filter(Boolean));
     this._renderOutput();
     this.scrollTop = scroll;
   }

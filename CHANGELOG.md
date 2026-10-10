@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.2
+- Fix: Text „nullnull“ unter dem Projekt-Block (append(null))
+
 ## 0.6.1
 - Integrations-Icon (brand/icon.png)
 
