@@ -284,13 +284,16 @@ async def ws_random(hass, connection, msg):
 
 def _settings(st: dict[str, Any]) -> dict[str, str]:
     s = st["data"].setdefault("settings", {})
-    return {"target_dir": str(s.get("target_dir", DEFAULT_DIR)), "dashboard_url": str(s.get("dashboard_url", ""))}
+    return {"target_dir": str(s.get("target_dir", DEFAULT_DIR)), "dashboard_url": str(s.get("dashboard_url", "")),
+            "dashboard_user": str(s.get("dashboard_user", "")), "dashboard_password": str(s.get("dashboard_password", ""))}
 
 
 @websocket_api.websocket_command({
     vol.Required("type"): "esphome_studio/deploy_settings",
     vol.Optional("target_dir"): str,
     vol.Optional("dashboard_url"): str,
+    vol.Optional("dashboard_user"): str,
+    vol.Optional("dashboard_password"): str,
 })
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -299,13 +302,19 @@ async def ws_deploy_settings(hass, connection, msg):
     if not st:
         return
     changed = False
-    for key in ("target_dir", "dashboard_url"):
+    for key in ("target_dir", "dashboard_url", "dashboard_user"):
         if key in msg:
             st["data"].setdefault("settings", {})[key] = msg[key].strip()[:300]
             changed = True
+    if msg.get("dashboard_password"):  # leer = unverändert lassen
+        st["data"].setdefault("settings", {})["dashboard_password"] = msg["dashboard_password"][:300]
+        changed = True
+    if msg.get("dashboard_user") == "" and "dashboard_user" in msg:
+        st["data"].setdefault("settings", {})["dashboard_password"] = ""  # ohne Benutzer kein Passwort
     if changed:
         await st["store"].async_save(st["data"])
     cur = _settings(st)
+    cur["has_password"] = bool(cur.pop("dashboard_password"))  # Passwort nie ans Panel zurückgeben
     cur["dir_exists"] = await hass.async_add_executor_job(lambda: Path(cur["target_dir"]).is_dir()) if cur["target_dir"] else False
     connection.send_result(msg["id"], cur)
 
@@ -329,7 +338,7 @@ async def ws_deploy(hass, connection, msg):
             from homeassistant.helpers.aiohttp_client import async_get_clientsession  # noqa: PLC0415
 
             out = await write_to_dashboard(async_get_clientsession(hass), cfg["dashboard_url"], name, res["yaml"],
-                                           res.get("secrets", ""))
+                                           res.get("secrets", ""), cfg["dashboard_user"], cfg["dashboard_password"])
         else:
             folder = cfg["target_dir"]
             if not folder:

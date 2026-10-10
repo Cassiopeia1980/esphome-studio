@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.1
+- Anmeldung (Benutzer/Passwort) am ESPHome Device Builder möglich
+
 ## 0.7.0
 - „In ESPHome speichern“ (Ordner oder ESPHome Device Builder), secrets nur ergänzt
 - Import erkennt Katalog-Bausteine

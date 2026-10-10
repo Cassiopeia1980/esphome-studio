@@ -1270,16 +1270,19 @@ class ESPHomeStudioPanel extends HTMLElement {
     const st = this._deploySet;
     const dir = h("input", { type: "text", value: st?.target_dir ?? "/config/esphome", placeholder: "/config/esphome" });
     const url = h("input", { type: "text", value: st?.dashboard_url ?? "", placeholder: "http://homeassistant.local:6052 (optional)" });
+    const usr = h("input", { type: "text", value: st?.dashboard_user ?? "", placeholder: "Benutzername", autocomplete: "off" });
+    const pwd = h("input", { type: "password", value: "", placeholder: st?.has_password ? "Passwort gespeichert (leer lassen = unverändert)" : "Passwort", autocomplete: "new-password" });
     const d = h("details", { class: "deploybox", open: !!this._deployOpen, onToggle: (ev) => { this._deployOpen = ev.target.open; if (ev.target.open && !this._deploySet) this._loadDeploy(); } },
       h("summary", {}, "Ziel für „In ESPHome speichern“"),
       h("label", { class: "pinnote" }, "Ordner mit den ESPHome-Dateien"), dir,
       h("label", { class: "pinnote" }, "oder Adresse des ESPHome Device Builders (hat Vorrang, nur ohne Anmeldung), z. B. http://homeassistant.local:6052"), url,
+      h("label", { class: "pinnote" }, "Anmeldung am Device Builder (nur falls dort eingerichtet)"), usr, pwd,
       h("div", { class: "row", style: "margin-top:8px" }, h("button", { onClick: async () => {
-        try { this._deploySet = await this._ws("deploy_settings", { target_dir: dir.value, dashboard_url: url.value });
+        try { this._deploySet = await this._ws("deploy_settings", { target_dir: dir.value, dashboard_url: url.value, dashboard_user: usr.value, dashboard_password: pwd.value });
           this._deployMsg = { text: "Ziel gespeichert." + (!this._deploySet.dashboard_url && !this._deploySet.dir_exists ? " Achtung: Der Ordner existiert nicht." : "") };
         } catch (e) { this._deployMsg = { err: true, text: e.message || "Speichern fehlgeschlagen." }; }
         this._renderOutput(); } }, "Ziel speichern")),
-      h("p", { class: "hint" }, "Vorhandene Dateien werden als .bak gesichert. In die secrets.yaml werden nur fehlende Einträge ergänzt, nichts wird überschrieben. Hinweis: Das ESPHome-Add-on liegt bei Home Assistant OS meist nicht im Ordner /config/esphome. Dann die Adresse des Device Builders eintragen (im Add-on den Port 6052 freigeben). Vorhandene Secrets bleiben unangetastet."));
+      h("p", { class: "hint" }, "Vorhandene Dateien werden als .bak gesichert. In die secrets.yaml werden nur fehlende Einträge ergänzt, nichts wird überschrieben. Hinweis: Das ESPHome-Add-on liegt bei Home Assistant OS meist nicht im Ordner /config/esphome. Dann die Adresse des Device Builders eintragen (im Add-on den Port 6052 freigeben). Vorhandene Secrets bleiben unangetastet. Das Passwort wird im Speicher von Home Assistant abgelegt (.storage, auch in Backups) und nie wieder im Panel angezeigt."));
     return d;
   }
 

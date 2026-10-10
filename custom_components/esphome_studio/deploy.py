@@ -58,6 +58,11 @@ def merge_secrets(existing: str, block: str) -> tuple[str, list[str], list[str]]
     return text, added, conflicts
 
 
+def need_auth_flag(exc: Exception) -> bool:
+    t = str(exc).lower()
+    return "authenticat" in t or "unauthor" in t or "auth" in t and "required" in t
+
+
 def check_name(name: str) -> str:
     if not NAME_RE.match(name or ""):
         raise DeployError("Der Gerätename ist ungültig (nur Kleinbuchstaben, Ziffern, - und _).")
@@ -89,7 +94,8 @@ def write_to_folder(folder: str, name: str, yaml_text: str, secrets_block: str) 
     return result
 
 
-async def write_to_dashboard(session: Any, base_url: str, name: str, yaml_text: str, secrets_block: str) -> dict[str, Any]:
+async def write_to_dashboard(session: Any, base_url: str, name: str, yaml_text: str, secrets_block: str,
+                             username: str = "", password: str = "") -> dict[str, Any]:
     """Über die WebSocket-Schnittstelle des ESPHome Device Builders (ESPHome ab 2026.x, ohne Anmeldung).
 
     Vorhandene Secret-Schlüssel werden nie überschrieben (der Device Builder verrät keine Werte).
@@ -104,6 +110,7 @@ async def write_to_dashboard(session: Any, base_url: str, name: str, yaml_text: 
     try:
         async with session.ws_connect(f"{base}/ws", timeout=15) as ws:
             counter = 0
+            need_auth = [False]
 
             async def cmd(command: str, **args: Any) -> Any:
                 nonlocal counter
@@ -114,13 +121,18 @@ async def write_to_dashboard(session: Any, base_url: str, name: str, yaml_text: 
                     m = await asyncio.wait_for(ws.receive_json(), 20)
                     if m.get("message_id") != mid:
                         if m.get("requires_auth"):
-                            raise DeployError("Das ESPHome-Dashboard verlangt eine Anmeldung. Dafür bitte den Ordner "
-                                              "nutzen oder die Anmeldung am Dashboard abschalten.")
+                            need_auth[0] = True
                         continue
                     if "result" in m:
                         return m["result"]
-                    raise DeployError(f"Das ESPHome-Dashboard meldet: {m.get('message') or m.get('error') or m}")
+                    raise DeployError(f"Das ESPHome-Dashboard meldet: {m.get('details') or m.get('message') or m.get('error') or m}")
 
+            if username:
+                try:
+                    await cmd("auth/login", username=username, password=password)
+                except DeployError as exc:
+                    raise DeployError("Anmeldung am ESPHome-Dashboard fehlgeschlagen. Benutzername und Passwort prüfen "
+                                      f"({exc}).") from exc
             existing = await cmd("config/get_secrets")
             result: dict[str, Any] = {"where": f"{base} → {name}.yaml", "backup": False,
                                       "secrets_added": [], "secrets_conflicts": []}
@@ -132,7 +144,10 @@ async def write_to_dashboard(session: Any, base_url: str, name: str, yaml_text: 
                     await cmd("config/set_secret", key=k, value=v)
                     result["secrets_added"].append(k)
             return result
-    except DeployError:
+    except DeployError as exc:
+        if need_auth_flag(exc) and not username:
+            raise DeployError("Das ESPHome-Dashboard verlangt eine Anmeldung. Benutzername und Passwort unter "
+                              "„Ziel“ eintragen.") from exc
         raise
     except Exception as exc:  # noqa: BLE001 - Netzwerkfehler lesbar machen
         raise DeployError(f"Das ESPHome-Dashboard ist nicht erreichbar oder antwortet anders als erwartet "

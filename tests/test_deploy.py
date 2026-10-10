@@ -97,3 +97,15 @@ async def test_dashboard_protocol_with_fake_device_builder(aiohttp_server, socke
             await dp.write_to_dashboard(s, "http://127.0.0.1:9", "kueche", "x", "")
         with pytest.raises(dp.DeployError):
             await dp.write_to_dashboard(s, "ftp://x", "kueche", "x", "")
+
+
+async def test_password_is_never_returned(setup, hass):  # noqa: F811
+    _entry, ws = setup
+    r = await call(ws, "deploy_settings", dashboard_url="http://x:6052", dashboard_user="admin", dashboard_password="geheim")
+    res = r["result"]
+    assert res["has_password"] is True and res["dashboard_user"] == "admin"
+    assert "dashboard_password" not in res and "geheim" not in str(r)
+    r = await call(ws, "deploy_settings", dashboard_url="http://x:6052")  # Passwort bleibt
+    assert r["result"]["has_password"] is True
+    r = await call(ws, "deploy_settings", dashboard_user="")  # ohne Benutzer kein Passwort
+    assert r["result"]["has_password"] is False

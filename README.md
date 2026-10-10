@@ -143,7 +143,7 @@ Lizenz: MIT
   - Alte Dateien werden als `.bak` gesichert.
   - In die `secrets.yaml` werden nur **fehlende** Einträge ergänzt. Vorhandene Werte werden nie überschrieben.
   - Wichtig: Das ESPHome-Add-on von Home Assistant OS liegt in einem Ordner, den Home Assistant selbst nicht beschreiben kann. Dort die Device-Builder-Adresse benutzen. Der Ordner passt für ESPHome in Docker oder auf einem anderen Rechner mit gemeinsamem Ordner.
-  - Der Device Builder darf keine Anmeldung verlangen.
+  - Verlangt der Device Builder eine Anmeldung, Benutzername und Passwort unter „Ziel“ eintragen. Das Passwort liegt im Speicher von Home Assistant (`.storage`, also auch in Backups) und wird nie wieder angezeigt.
 - **Import erkennt Katalog-Bausteine:** Beim Import werden einfache Katalog-Komponenten (z. B. Sensoren an I²C, Template-Schalter) wieder als bearbeitbare Bausteine übernommen. Alles mit Lambdas, Filtern, UART/SPI, Verweisen oder anderen Besonderheiten bleibt unverändert als Zusatz-YAML erhalten (nichts geht verloren).
 - **Mehr geprüfte Komponenten:** Über 40 Bluetooth-Sensoren (Xiaomi, ThermoPro, Ruuvi …) legen jetzt den benötigten BLE-Tracker automatisch mit an.
 - **Backup:** Projekte liegen im internen Speicher von Home Assistant (`.storage/esphome_studio`) und sind damit in deinen Home-Assistant-Backups enthalten.
