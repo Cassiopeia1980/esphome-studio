@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.1
+- Integrations-Icon (brand/icon.png)
+
 ## 0.6.0
 - Profi-Einstellungen je Entität (Icon, Einheit, Geräteklasse, Filter …)
 - Katalog mit ca. 884 Komponenten (661 mit `esphome config` verifiziert)
