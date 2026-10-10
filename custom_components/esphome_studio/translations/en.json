@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ESPHome Studio",
+        "description": "Adds an \"ESPHome Studio\" panel to the sidebar for building ESPHome configurations with a few clicks. No settings needed."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "ESPHome Studio is already set up."
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ESPHome Studio",
+        "description": "Fügt ein Panel „ESPHome Studio“ in die Seitenleiste ein, mit dem du ESPHome-Konfigurationen per Mausklick erstellst. Es sind keine Einstellungen nötig."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "ESPHome Studio ist schon eingerichtet."
+    }
+  }
+}

@@ -1,0 +1,19 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ZIP bauen
+        run: |
+          cd custom_components/esphome_studio
+          zip -r ../../esphome_studio.zip . -x "__pycache__/*" "*.pyc"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: esphome_studio.zip
+          generate_release_notes: true
