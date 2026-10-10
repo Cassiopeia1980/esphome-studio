@@ -228,6 +228,10 @@ def check(esphome_bin: str, entry: dict, plat: str) -> tuple[bool, str, str]:
             if prov and prov["id"] not in (entry.get("needs_cat") or []):
                 entry.setdefault("needs_cat", []).append(prov["id"])
                 learned = True
+        if "No BLE tracker configured" in out and "esp32_ble_tracker" in cat and entry["id"] != "esp32_ble_tracker" \
+                and "esp32_ble_tracker" not in (entry.get("needs_cat") or []):
+            entry.setdefault("needs_cat", []).append("esp32_ble_tracker")
+            learned = True
         if re.search(r"\[name\] is an invalid option", out) and entry.get("self_entity"):
             entry["self_entity"] = False
             learned = True

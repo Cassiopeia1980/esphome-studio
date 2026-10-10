@@ -15,7 +15,8 @@ from typing import Any
 
 from . import boards as B
 from .components import COMPONENTS
-from .generator import LOG_LEVELS, PWM_PLATFORM, _effects, default_project, dump_yaml, new_component, slug
+from .catalog import catalog as _catalog
+from .generator import LOG_LEVELS, spec_for, PWM_PLATFORM, _effects, default_project, dump_yaml, new_component, slug
 from .yamlutil import Tag, load_text
 
 PLATFORM_KEYS = ("esp8266", "esp32", "rp2", "rp2040", "bk72xx", "rtl87xx", "ln882x")
@@ -171,6 +172,102 @@ class _Importer:
         c = new_component(type_key, name, pins)
         if isinstance(item.get("id"), str):
             c["id"] = item["id"]
+        return c
+
+    # ------------------------------------------------- Katalog-Bausteine ---
+    def _cat_index(self) -> dict[tuple[str, str], dict[str, Any]]:
+        idx = getattr(self, "_cat_idx", None)
+        if idx is None:
+            idx = {}
+            for e in _catalog().get("entries", []):
+                if e.get("unsupported") or e.get("domain") == "hub":
+                    continue
+                idx.setdefault((e["domain"], e["platform"]), e)
+            self._cat_idx = idx
+        return idx
+
+    def catalog_item(self, domain: str, item: dict[str, Any]) -> dict[str, Any]:
+        """Wandelt einen Eintrag in einen Katalog-Baustein um, sonst Unmapped (bleibt dann Zusatz-YAML)."""
+        e = self._cat_index().get((domain, str(item.get("platform"))))
+        if not e:
+            raise Unmapped("nicht im Katalog")
+        if e.get("bus") in ("uart", "spi") or e.get("hub") or e.get("refs") or e.get("needs") \
+                or e.get("needs_cat") or e.get("needs_dom"):
+            raise Unmapped("braucht weitere Bausteine (Hub, UART, SPI oder Verweise)")
+        pins = {ps["key"]: ps for ps in e["pins"]}
+        fields = {f["key"]: f for f in e["fields"]}
+        subs = {sb["key"]: sb for sb in e.get("subs", [])}
+        allowed = {"platform", "id", "name", "update_interval"} | set(pins) | set(fields) | set(subs)
+        extra = [k for k in item if k not in allowed]
+        if extra:
+            raise Unmapped("enthält Einstellungen, die das Studio nicht abbildet: " + ", ".join(sorted(map(str, extra))))
+        if "update_interval" in item and not e.get("has_interval"):
+            raise Unmapped("update_interval nicht abbildbar")
+        name = item.get("name")
+        if e.get("self_entity"):
+            if not isinstance(name, str) or not name.strip():
+                raise Unmapped("Name fehlt")
+        else:
+            if not (isinstance(name, str) and name.strip()):
+                name = None
+                for k, sb in subs.items():  # Name aus den Messwert-Namen ableiten („Bad Temperatur“ -> „Bad“)
+                    sv = item.get(k)
+                    n = sv.get("name") if isinstance(sv, dict) else None
+                    if isinstance(n, str) and n.endswith(" " + sb["label"]) and n[: -len(sb["label"]) - 1].strip():
+                        name = n[: -len(sb["label"]) - 1].strip()
+                        break
+                if not name:
+                    name = str(item.get("id") or e["label"])
+        o: dict[str, Any] = {}
+        cpins: dict[str, str] = {}
+        for k, ps in pins.items():
+            if k not in item:
+                continue
+            pid, inv, mode = self.pin(self.val(item[k]), modes=True)
+            if inv or mode not in (None, "INPUT", "OUTPUT"):
+                raise Unmapped(f"Pin {k}: invertiert oder besonderer Modus")
+            cpins[k] = pid
+        for k, f in fields.items():
+            if k not in item:
+                continue
+            if "lambda" in k or k.startswith("on_"):
+                raise Unmapped(f"{k}: Lambda/Automation nicht abbildbar")
+            v = self.val(item[k])
+            if v is None or isinstance(v, (dict, list)) or isinstance(item[k], Tag):
+                raise Unmapped(f"{k}: Wert nicht abbildbar")
+            if f["type"] == "bool":
+                if not isinstance(v, bool):
+                    raise Unmapped(f"{k}: kein Ja/Nein-Wert")
+                o["f_" + k] = v
+            else:
+                if f["type"] == "enum" and str(v) not in [str(x) for x in f.get("choices", [])] and f.get("choices"):
+                    raise Unmapped(f"{k}: Wert nicht in der Auswahl")
+                o["f_" + k] = str(v)
+        for k, sb in subs.items():
+            if k not in item:
+                continue
+            sv = item[k]
+            want = {"name": f"{name} {sb['label']}"}
+            if sv not in (want, None) and not (isinstance(sv, dict) and sv == want):
+                raise Unmapped(f"{k}: eigene Einstellungen/Name abweichend")
+            o["s_" + k] = True
+        for sb in subs.values():
+            if sb.get("required") and "s_" + sb["key"] not in o:
+                raise Unmapped("Pflicht-Messwert fehlt")
+        if "update_interval" in item:
+            iv = self.val(item["update_interval"])
+            if not isinstance(iv, str) or not INTERVAL_RE.match(iv):
+                raise Unmapped("update_interval ungültig")
+            o["interval"] = iv
+        iid = item.get("id")
+        if isinstance(iid, str) and iid:
+            if self.refs.get(iid, 0) > 0 and (e.get("self_entity") or e.get("subs") or e.get("no_id")):
+                raise Unmapped("die ID wird anderswo verwendet")
+        c = new_component("generic", name, cpins)
+        c["cat"] = e["id"]
+        c["options"].update(o)
+        if isinstance(iid, str) and iid:
+            c["id"] = iid
         return c
 
     def freq(self, v: Any) -> str:
@@ -897,7 +994,11 @@ class _Importer:
                 return True
             return False
 
-        for domain in ("output", "one_wire", "light", "switch", "binary_sensor", "sensor", "text_sensor", "button"):
+        fixed_doms = ("output", "one_wire", "light", "switch", "binary_sensor", "sensor", "text_sensor", "button")
+        cat_doms = sorted({d for (d, _pl) in self._cat_index()
+                           if d not in fixed_doms and isinstance(cfg.get(d), list)})
+        all_doms = fixed_doms + tuple(cat_doms)
+        for domain in all_doms:
             items = cfg.get(domain)
             if not isinstance(items, list):
                 continue
@@ -931,8 +1032,17 @@ class _Importer:
                     else:
                         raise Unmapped("nicht abbildbar")
                 except Unmapped as exc:
-                    keep.setdefault(domain, []).append(item)
-                    self.unmapped.append(f"{self.describe(domain, item)} – {exc}")
+                    if domain in ("output", "one_wire"):
+                        keep.setdefault(domain, []).append(item)
+                        self.unmapped.append(f"{self.describe(domain, item)} – {exc}")
+                        continue
+                    try:
+                        comps.append(self.catalog_item(domain, item))
+                        self.note(f"{self.describe(domain, item)} wurde als Katalog-Baustein übernommen.")
+                    except Unmapped as exc2:
+                        keep.setdefault(domain, []).append(item)
+                        why = str(exc) if str(exc2) == "nicht im Katalog" else str(exc2)
+                        self.unmapped.append(f"{self.describe(domain, item)} – {why}")
         # Ausgänge / 1-Wire, die verbraucht wurden, nicht weitergeben
         for dom, used in (("output", consumed_outputs), ("one_wire", consumed_buses)):
             rest = [i for i in keep.get(dom, []) if not (isinstance(i, dict) and i.get("id") in used)]
@@ -940,7 +1050,7 @@ class _Importer:
                 keep[dom] = rest
             else:
                 keep.pop(dom, None)
-        for dom in ("output", "one_wire", "light", "switch", "binary_sensor", "sensor", "text_sensor", "button"):
+        for dom in all_doms:
             cfg.pop(dom, None)
         for dom, items in keep.items():
             self.extra[dom] = items
@@ -998,7 +1108,7 @@ class _Importer:
 
         # i2c-Bus
         i2c = cfg.get("i2c")
-        needs = any(COMPONENTS[c["type"]].get("needs_i2c") for c in comps)
+        needs = any(spec_for(c).get("needs_i2c") for c in comps)
         if isinstance(i2c, dict) and needs and set(i2c) <= {"sda", "scl", "scan"} and "sda" in i2c and "scl" in i2c \
                 and i2c.get("scan", True) is True:
             try:

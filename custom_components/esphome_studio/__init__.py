@@ -31,6 +31,7 @@ from .const import (
     VERSION,
 )
 from .generator import default_project, generate, new_ap_password, new_api_key, new_password
+from .deploy import DEFAULT_DIR, DeployError, write_to_dashboard, write_to_folder
 from .importer import import_yaml
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not hass.data.get(WS_REGISTERED):
         for handler in (ws_meta, ws_board, ws_catalog, ws_import, ws_list, ws_get, ws_save, ws_delete, ws_new, ws_generate, ws_set_secrets,
-                        ws_random):
+                        ws_random, ws_deploy_settings, ws_deploy):
             websocket_api.async_register_command(hass, handler)
         hass.data[WS_REGISTERED] = True
 
@@ -279,3 +280,68 @@ async def ws_set_secrets(hass, connection, msg):
 async def ws_random(hass, connection, msg):
     value = {"api": new_api_key, "ota": new_password, "ap": new_ap_password}[msg["kind"]]()
     connection.send_result(msg["id"], {"value": value})
+
+
+def _settings(st: dict[str, Any]) -> dict[str, str]:
+    s = st["data"].setdefault("settings", {})
+    return {"target_dir": str(s.get("target_dir", DEFAULT_DIR)), "dashboard_url": str(s.get("dashboard_url", ""))}
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/deploy_settings",
+    vol.Optional("target_dir"): str,
+    vol.Optional("dashboard_url"): str,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_deploy_settings(hass, connection, msg):
+    st = _state(hass, connection, msg["id"])
+    if not st:
+        return
+    changed = False
+    for key in ("target_dir", "dashboard_url"):
+        if key in msg:
+            st["data"].setdefault("settings", {})[key] = msg[key].strip()[:300]
+            changed = True
+    if changed:
+        await st["store"].async_save(st["data"])
+    cur = _settings(st)
+    cur["dir_exists"] = await hass.async_add_executor_job(lambda: Path(cur["target_dir"]).is_dir()) if cur["target_dir"] else False
+    connection.send_result(msg["id"], cur)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/deploy", vol.Required("project"): dict})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_deploy(hass, connection, msg):
+    """Fertige YAML in den ESPHome-Ordner (oder per Dashboard) schreiben; secrets.yaml nur ergänzen."""
+    st = _state(hass, connection, msg["id"])
+    if not st:
+        return
+    res = generate(msg["project"], st["data"]["secrets"])
+    if not res.get("ok"):
+        connection.send_error(msg["id"], "invalid", "Die Konfiguration hat noch Fehler. Erst beheben, dann speichern.")
+        return
+    name = str(msg["project"].get("name") or "")
+    cfg = _settings(st)
+    try:
+        if cfg["dashboard_url"]:
+            from homeassistant.helpers.aiohttp_client import async_get_clientsession  # noqa: PLC0415
+
+            out = await write_to_dashboard(async_get_clientsession(hass), cfg["dashboard_url"], name, res["yaml"],
+                                           res.get("secrets", ""))
+        else:
+            folder = cfg["target_dir"]
+            if not folder:
+                raise DeployError("Kein Ziel eingestellt. Ordner oder Dashboard-Adresse eintragen.")
+            if not hass.config.is_allowed_path(folder):
+                raise DeployError(f"Der Ordner „{folder}“ ist für Home Assistant nicht freigegeben "
+                                  "(allowlist_external_dirs). Ordner unterhalb von /config verwenden.")
+            out = await hass.async_add_executor_job(write_to_folder, folder, name, res["yaml"], res.get("secrets", ""))
+    except DeployError as exc:
+        connection.send_error(msg["id"], "deploy_failed", str(exc))
+        return
+    except OSError as exc:
+        connection.send_error(msg["id"], "deploy_failed", f"Schreiben fehlgeschlagen: {exc.strerror or exc}")
+        return
+    connection.send_result(msg["id"], out)

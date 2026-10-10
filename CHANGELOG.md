@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0
+- „In ESPHome speichern“ (Ordner oder ESPHome Device Builder), secrets nur ergänzt
+- Import erkennt Katalog-Bausteine
+- 699 von 844 Katalog-Komponenten verifiziert (BLE-Sensoren legen den Tracker automatisch an)
+
 ## 0.6.2
 - Fix: Text „nullnull“ unter dem Projekt-Block (append(null))
 

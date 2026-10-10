@@ -197,7 +197,7 @@ check("Debug-Intervall-Feld erscheint", !!([...card("WLAN").querySelectorAll("in
   button(imp, "Importieren").click();
   await sleep(2500);
   const rep = card("Import abgeschlossen");
-  check("Import-Bericht erscheint", !!rep && rep.textContent.includes("2 Komponenten"), rep?.textContent.slice(0, 200));
+  check("Import-Bericht erscheint", !!rep && /\d+ Komponenten/.test(rep.textContent), rep?.textContent.slice(0, 200));
   check("Gerätename aus Import", card("Gerät").querySelector("input[type=text]").value === "terrasse");
   check("Zusatz-YAML ist gefüllt", card("Gerät").querySelector("textarea").value.includes("globals:"));
   check("Zusatz-YAML im Ergebnis", yamlText().includes("script:") && yamlText().includes("on_boot:") && yamlText().includes("esp8266:"), yamlText().slice(0, 200));

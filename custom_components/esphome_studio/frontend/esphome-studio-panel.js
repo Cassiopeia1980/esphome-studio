@@ -134,6 +134,8 @@ const CSS = `
   .msg.err { background: #ffcdd2; color: #7f1d1d; }
   .msg.warn { background: #fff3cd; color: #6b4e00; }
   .msg.ok { background: #c8e6c9; color: #1b5e20; }
+  .deploybox { margin-top: 10px; } .deploybox summary { cursor: pointer; font-size: 13px; opacity: .8; }
+  .deploybox input { width: 100%; margin: 4px 0 8px; }
   @media (prefers-color-scheme: dark) { .msg.err { background: #4a1a1a; color: #ffc9c9; }
     .msg.warn { background: #46380a; color: #ffe49a; } .msg.ok { background: #1c3d22; color: #bfe8c4; } }
   .banner { margin: 12px 16px 0; padding: 10px 14px; border-radius: 8px; background: #ffcdd2; color: #7f1d1d; }
@@ -1254,11 +1256,53 @@ class ESPHomeStudioPanel extends HTMLElement {
       h("pre", { class: "code" }, text || "(noch nichts)"),
       h("div", { class: "row", style: "margin-top:10px" }, copyBtn,
         h("button", { disabled: !o.ok && isYaml, onClick: () => this._download(filename, text) }, "Herunterladen"),
+        isYaml ? h("button", { class: "primary", disabled: !o.ok, onClick: () => this._deploy() }, "In ESPHome speichern") : null,
         h("span", { class: "spacer" }), h("span", { class: "pinnote" }, filename)),
+      this._deployMsg ? h("div", { class: `msg ${this._deployMsg.err ? "err" : "ok"}`, style: "margin-top:8px" }, this._deployMsg.text) : null,
+      isYaml ? this._deployBox() : null,
       h("p", { class: "hint" }, isYaml
         ? "In ESPHome ein neues Gerät anlegen (oder ein vorhandenes bearbeiten), den Inhalt ersetzen und installieren. Erstes Flashen per USB, danach per WLAN."
         : "Diese Zeilen in die secrets.yaml von ESPHome einfügen. WLAN-Name und -Passwort nur einmal, die Schlüssel mit Gerätenamen gelten pro Gerät."));
     this._updateDirty();
+  }
+
+  _deployBox() {
+    const st = this._deploySet;
+    const dir = h("input", { type: "text", value: st?.target_dir ?? "/config/esphome", placeholder: "/config/esphome" });
+    const url = h("input", { type: "text", value: st?.dashboard_url ?? "", placeholder: "http://homeassistant.local:6052 (optional)" });
+    const d = h("details", { class: "deploybox", open: !!this._deployOpen, onToggle: (ev) => { this._deployOpen = ev.target.open; if (ev.target.open && !this._deploySet) this._loadDeploy(); } },
+      h("summary", {}, "Ziel für „In ESPHome speichern“"),
+      h("label", { class: "pinnote" }, "Ordner mit den ESPHome-Dateien"), dir,
+      h("label", { class: "pinnote" }, "oder Adresse des ESPHome Device Builders (hat Vorrang, nur ohne Anmeldung), z. B. http://homeassistant.local:6052"), url,
+      h("div", { class: "row", style: "margin-top:8px" }, h("button", { onClick: async () => {
+        try { this._deploySet = await this._ws("deploy_settings", { target_dir: dir.value, dashboard_url: url.value });
+          this._deployMsg = { text: "Ziel gespeichert." + (!this._deploySet.dashboard_url && !this._deploySet.dir_exists ? " Achtung: Der Ordner existiert nicht." : "") };
+        } catch (e) { this._deployMsg = { err: true, text: e.message || "Speichern fehlgeschlagen." }; }
+        this._renderOutput(); } }, "Ziel speichern")),
+      h("p", { class: "hint" }, "Vorhandene Dateien werden als .bak gesichert. In die secrets.yaml werden nur fehlende Einträge ergänzt, nichts wird überschrieben. Hinweis: Das ESPHome-Add-on liegt bei Home Assistant OS meist nicht im Ordner /config/esphome. Dann die Adresse des Device Builders eintragen (im Add-on den Port 6052 freigeben). Vorhandene Secrets bleiben unangetastet."));
+    return d;
+  }
+
+  async _loadDeploy() {
+    try { this._deploySet = await this._ws("deploy_settings"); this._renderOutput(); } catch { /* egal */ }
+  }
+
+  async _deploy() {
+    this._deployMsg = { text: "Speichere …" };
+    this._renderOutput();
+    try {
+      await this._save?.();
+    } catch { /* Projekt-Speichern ist optional */ }
+    try {
+      const r = await this._ws("deploy", { project: this.p });
+      const parts = [`Gespeichert: ${r.where}${r.backup ? " (alte Datei als .bak gesichert)" : ""}.`];
+      if (r.secrets_added?.length) parts.push(`secrets.yaml ergänzt: ${r.secrets_added.join(", ")}.`);
+      if (r.secrets_conflicts?.length) parts.push(`Nicht überschrieben (anderer Wert in der secrets.yaml): ${r.secrets_conflicts.join(", ")}. Gerät dann ggf. von Hand angleichen.`);
+      this._deployMsg = { text: parts.join(" ") };
+    } catch (e) {
+      this._deployMsg = { err: true, text: e?.message || "Speichern in ESPHome ist fehlgeschlagen." };
+    }
+    this._renderOutput();
   }
 
   async _copy(text) {

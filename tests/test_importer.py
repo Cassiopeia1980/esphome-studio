@@ -70,7 +70,7 @@ def test_messy_yaml_keeps_everything():
     q = res["project"]
     assert q["name"] == "terrasse" and q["friendly_name"] == "Terrasse" and q["board"] == "d1_mini"
     assert q["log_level"] == "DEBUG"
-    assert {c["name"] for c in q["components"]} == {"Licht Relais", "Taster"}
+    assert {"Licht Relais", "Taster"} <= {c["name"] for c in q["components"]}
     taster = next(c for c in q["components"] if c["name"] == "Taster")
     assert taster["pins"] == {"pin": "GPIO14"} and taster["options"]["debounce_ms"] == 50
     assert taster["options"]["toggle_target"] == next(c["uid"] for c in q["components"] if c["name"] == "Licht Relais")
@@ -146,3 +146,27 @@ def test_extra_yaml_in_generator():
     assert any("Zusatz-YAML" in e for e in gen.generate(p, STORED)["errors"])
     p["extra_yaml"] = "- nur eine liste"
     assert any("Zusatz-YAML" in e for e in gen.generate(p, STORED)["errors"])
+
+
+def test_catalog_components_are_imported_and_roundtrip():
+    import validate_with_esphome as v  # noqa: PLC0415
+    from custom_components.esphome_studio.yamlutil import load_text  # noqa: PLC0415
+
+    r = gen.generate(v.SAMPLES["katalog-d1"], STORED)
+    assert r["ok"], r["errors"]
+    res = imp.import_yaml(r["yaml"], r["secrets"])
+    assert res["ok"] and res["unmapped"] == [], res["unmapped"]
+    assert [c["type"] for c in res["project"]["components"]] == ["generic", "generic"]
+    r2 = gen.generate(res["project"], STORED)
+    assert r2["ok"], r2["errors"]
+    assert load_text(r2["yaml"]) == load_text(r["yaml"])
+
+
+def test_catalog_import_keeps_unsupported_as_extra_yaml():
+    yml = ("esphome:\n  name: t\nesp8266:\n  board: d1_mini\n"
+           "sensor:\n  - platform: wifi_signal\n    name: WLAN\n    update_interval: 120s\n"
+           "    filters:\n      - multiply: 2\n")
+    res = imp.import_yaml(yml)
+    assert res["ok"]
+    assert any("filters" in u for u in res["unmapped"]), res["unmapped"]
+    assert "multiply" in res["project"]["extra_yaml"]

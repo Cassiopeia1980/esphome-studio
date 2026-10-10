@@ -132,7 +132,19 @@ Lizenz: MIT
 ## Neu in 0.6.0
 
 - **Profi-Einstellungen je Entität**: Icon, Einheit, Geräteklasse, Zustandsklasse, Nachkommastellen, Entitätskategorie, intern / standardmäßig deaktiviert und **Filter** (Sensoren: 19 Filter, dazu Binär- und Textsensoren). Alles wird vom Generator geprüft und gegen echtes `esphome config` getestet.
-- **Katalog erweitert**: ca. 884 Komponenten, davon ca. 844 unterstützt und 661 mit `esphome config` verifiziert. Nicht verifizierte sind mit „?“ markiert.
+- **Katalog erweitert**: ca. 884 Komponenten, davon ca. 844 unterstützt und 699 mit `esphome config` verifiziert. Nicht verifizierte sind mit „?“ markiert.
 - **Hubs und Referenzen** (z. B. UART-/I²C-Geräte, Sensoren die einen Hub brauchen) werden automatisch mit angelegt.
 - **Port-Expander** (MCP23xxx, PCF8574, PCA9554, SN74HC165/595 u. a.) als Pin-Quelle. Pull-ups gibt es nur bei MCP23xxx, PCA6416A und PI4IOE5V6408; sonst warnt der Generator.
 - IDs, die ESPHome-Integrationen heißen (z. B. `display`), werden automatisch zu `display_id`.
+
+## Neu in 0.7.0
+
+- **„In ESPHome speichern“:** Der Knopf unter dem YAML schreibt die Datei direkt in deinen ESPHome-Ordner oder über den ESPHome Device Builder (Adresse z. B. `http://homeassistant.local:6052`, im Add-on den Port freigeben). Dazu unter „Ziel für In ESPHome speichern“ den Ordner oder die Adresse eintragen.
+  - Alte Dateien werden als `.bak` gesichert.
+  - In die `secrets.yaml` werden nur **fehlende** Einträge ergänzt. Vorhandene Werte werden nie überschrieben.
+  - Wichtig: Das ESPHome-Add-on von Home Assistant OS liegt in einem Ordner, den Home Assistant selbst nicht beschreiben kann. Dort die Device-Builder-Adresse benutzen. Der Ordner passt für ESPHome in Docker oder auf einem anderen Rechner mit gemeinsamem Ordner.
+  - Der Device Builder darf keine Anmeldung verlangen.
+- **Import erkennt Katalog-Bausteine:** Beim Import werden einfache Katalog-Komponenten (z. B. Sensoren an I²C, Template-Schalter) wieder als bearbeitbare Bausteine übernommen. Alles mit Lambdas, Filtern, UART/SPI, Verweisen oder anderen Besonderheiten bleibt unverändert als Zusatz-YAML erhalten (nichts geht verloren).
+- **Mehr geprüfte Komponenten:** Über 40 Bluetooth-Sensoren (Xiaomi, ThermoPro, Ruuvi …) legen jetzt den benötigten BLE-Tracker automatisch mit an.
+- **Backup:** Projekte liegen im internen Speicher von Home Assistant (`.storage/esphome_studio`) und sind damit in deinen Home-Assistant-Backups enthalten.
+- **Icon:** Eigene Integrations-Icons zeigt Home Assistant ab 2026.3. Ältere Versionen laufen weiter, nur ohne Icon.
