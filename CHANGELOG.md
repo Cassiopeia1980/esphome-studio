@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.1
+- Katalog-Generator ist jetzt deterministisch (gleiche ESPHome-Version ergibt immer dieselbe catalog.json), der monatliche Update-Pull-Request erscheint nur noch bei echten Änderungen
+
 ## 0.9.0
 - 17 Vorlagen (neu: Zwei Relais, Bewegungsmelder, SHT3x, BH1750, HC-SR04, Spannung messen)
 - Projekt exportieren/laden als Datei (ohne Schlüssel und Passwörter)

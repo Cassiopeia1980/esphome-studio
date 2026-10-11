@@ -225,7 +225,8 @@ def main() -> int:
     # Hubs: Bauteile mit eigenem Abschnitt (z. B. ld2410, ads1115). Plattformen verweisen per use_id-Klasse darauf.
     BUS_CLASSES = {"uart::UARTComponent", "i2c::I2CBus", "spi::SPIComponent"}
     comp_class: dict[str, str] = {}
-    for key, data in D.items():
+    # sortiert: mehrere Komponenten teilen sich manchmal dieselbe Klasse (z. B. LibreTiny), die Reihenfolge der Schema-Dateien ist aber zufällig
+    for key, data in sorted(D.items()):
         if "." in key or key in DOMAINS:
             continue
         sch = (data.get("schemas", {}).get("CONFIG_SCHEMA", {}) or {}).get("schema") or {}
