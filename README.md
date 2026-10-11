@@ -6,10 +6,12 @@ Ein Konfigurator für ESPHome direkt in Home Assistant, ähnlich wie die GPIO-Ko
 Board wählen, jedem Pin eine Funktion geben, WLAN und Secrets eintragen, fertig ist die ESPHome-YAML.
 Das Panel erscheint in der Seitenleiste von Home Assistant (nur für Administratoren).
 
+<p align="center"><img src="https://raw.githubusercontent.com/Cassiopeia1980/esphome-studio/main/docs/screenshots/wizard-de.png" width="48%" alt="Start-Assistent"> <img src="https://raw.githubusercontent.com/Cassiopeia1980/esphome-studio/main/docs/screenshots/project-de.png" width="48%" alt="Projekt / Project"></p>
+
 ## Was es kann
 
 - **Anfängerhilfe:** Standardmäßig läuft das Panel im **Einfachen Modus** (Schalter oben rechts). Bei einem leeren
-  Projekt führt ein Start-Assistent in drei Schritten durch: Board wählen, eine von 11 Vorlagen nehmen (Steckdose,
+  Projekt führt ein Start-Assistent in drei Schritten durch: Board wählen, eine von 17 Vorlagen nehmen (Steckdose, Doppelrelais, Bewegungsmelder, SHT3x, BH1750, HC-SR04, Spannung,
   Relais mit Taster, Licht, Dimmer, RGB, LED-Streifen, DHT22, BME280, DS18B20, Türkontakt, IR-Sender) und das WLAN
   eintragen. Die Pins sucht das Studio selbst aus (ohne Boot-, UART-, USB-, Flash-Pins). Vorlagen, die auf dem
   Board nicht gehen, sind ausgegraut. Im Einfachen Modus sind Pin-Tabelle, YAML-Import, Zusatz-YAML und
@@ -130,6 +132,15 @@ Browser, das Flashen auf echter Hardware und neuere Home-Assistant-Versionen als
 
 Lizenz: MIT
 
+
+## Neu in 0.9.0
+
+- **17 Vorlagen** (neu: Zwei Relais, Bewegungsmelder, SHT3x, BH1750, HC-SR04, Spannung messen).
+- **Projekt als Datei sichern und laden** („Exportieren“ / „Aus Datei laden“). Die Datei enthält keine Schlüssel und Passwörter, beim Laden werden neue erzeugt.
+- Fix: Im Ergebnis-Bereich stand unter den Schaltflächen das Wort „null“. Einige Texte (z. B. „bereit“, „Log-Stufe“) fehlten auf Englisch.
+- Automatische Tests für das Panel (Deutsch und Englisch) und `esphome config` laufen jetzt bei jedem Push auf GitHub.
+- Monatlicher Workflow, der Boards und Katalog aus der neuesten ESPHome-Version neu einliest (als Pull Request).
+- Screenshots in der README, Issue-Vorlagen und `CONTRIBUTING.md`.
 
 ## Neu in 0.8.0
 

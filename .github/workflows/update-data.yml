@@ -1,0 +1,46 @@
+name: Update ESPHome data
+# Liest Boards und Komponenten aus der neuesten ESPHome-Version neu aus und öffnet einen Pull Request.
+# Voraussetzung: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests".
+on:
+  schedule:
+    - cron: "0 4 5 * *"
+  workflow_dispatch:
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: ESPHome installieren
+        run: pip install esphome pyyaml voluptuous
+      - name: Boards neu einlesen
+        run: python tools/gen_boards.py
+      - name: Komponenten-Schema erzeugen und Katalog bauen
+        run: |
+          ESPHOME_VERSION="$(python -c 'from esphome.const import __version__ as v; print(v)')"
+          curl -sSfLO "https://raw.githubusercontent.com/esphome/esphome/${ESPHOME_VERSION}/script/build_language_schema.py" \
+            || curl -sSfLO https://raw.githubusercontent.com/esphome/esphome/dev/script/build_language_schema.py
+          python build_language_schema.py --output-path schema_out
+          python tools/gen_catalog.py schema_out
+          rm -rf schema_out build_language_schema.py
+      - name: Fehlende Übersetzungen auflisten
+        run: python tools/extract_i18n.py --missing > /tmp/missing.txt || true
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: auto/update-esphome-data
+          commit-message: "Daten aus aktueller ESPHome-Version aktualisiert"
+          title: "Daten aus aktueller ESPHome-Version aktualisiert"
+          body: |
+            Automatisch erzeugt: `boards_data.json` und `catalog.json` wurden neu aus ESPHome gelesen.
+
+            Bitte vor dem Zusammenführen:
+            1. Tests laufen lassen (`pytest`, `tests/ui_smoke*.mjs`).
+            2. Neue Texte in `i18n_en.json` übersetzen (`python tools/extract_i18n.py --missing`).
+            3. Neue Katalog-Bausteine ggf. mit `tools/verify_catalog.py` prüfen. Unverifizierte Bausteine erscheinen nur, wenn „Auch ungeprüfte Bausteine zeigen“ aktiv ist.
+          labels: automated
+          delete-branch: true

@@ -109,3 +109,10 @@ def test_english_names_roundtrip_through_importer():
         assert res["ok"] and res["project"]["diag"]["wifi_signal"] and res["project"]["diag"]["uptime_text"], (lang, res)
         assert not res["unmapped"], (lang, res["unmapped"])
     assert "WiFi signal" in gen.generate(p, {}, "en")["yaml"] and "WLAN-Signal" in gen.generate(p, {}, "de")["yaml"]
+
+
+def test_ui_dictionary_only_for_english():
+    from esphome_studio.i18n import ui_dictionary
+    assert ui_dictionary("de") == {}
+    d = ui_dictionary("en")
+    assert d["Speichern"] == "Save" and d["bereit"] == "ready"

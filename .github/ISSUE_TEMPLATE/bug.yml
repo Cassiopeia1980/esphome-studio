@@ -1,0 +1,29 @@
+name: Fehler melden / Report a bug
+description: Etwas funktioniert nicht oder erzeugt falsches YAML / Something is broken or generates wrong YAML
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version von ESPHome Studio
+      description: Steht oben im Panel (z. B. v0.9.0) / Shown at the top of the panel
+    validations:
+      required: true
+  - type: input
+    id: ha
+    attributes:
+      label: Home-Assistant- und ESPHome-Version
+      placeholder: "HA 2026.10.1, ESPHome Device Builder 2026.9.1"
+  - type: textarea
+    id: what
+    attributes:
+      label: Was ist passiert? / What happened?
+      description: Was hast du gemacht, was hast du erwartet, was kam heraus? Ein Screenshot hilft.
+    validations:
+      required: true
+  - type: textarea
+    id: yaml
+    attributes:
+      label: Erzeugtes YAML oder Fehlermeldung / Generated YAML or error message
+      description: Bitte vorher WLAN-Namen, Passwörter und Schlüssel entfernen / Please remove Wi-Fi names, passwords and keys first
+      render: yaml

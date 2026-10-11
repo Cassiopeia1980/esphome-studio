@@ -7,10 +7,12 @@ pick a board, give every pin a function, enter Wi-Fi and secrets, and you get th
 The panel appears in the Home Assistant sidebar (administrators only). The panel language can be switched between
 **German and English** at the top right; by default it follows the Home Assistant language.
 
+<p align="center"><img src="https://raw.githubusercontent.com/Cassiopeia1980/esphome-studio/main/docs/screenshots/wizard-en.png" width="48%" alt="Start wizard"> <img src="https://raw.githubusercontent.com/Cassiopeia1980/esphome-studio/main/docs/screenshots/project-en.png" width="48%" alt="Projekt / Project"></p>
+
 ## Features
 
 - **Beginner friendly:** The panel starts in **Simple mode** (toggle at the top right). For an empty project a
-  three-step wizard guides you: choose a board, pick one of 11 templates (socket, relay with button, light, dimmer,
+  three-step wizard guides you: choose a board, pick one of 17 templates (socket, dual relay, motion sensor, SHT3x, BH1750, HC-SR04, voltage, relay with button, light, dimmer,
   RGB, LED strip, DHT22, BME280, DS18B20, door contact, IR transmitter) and enter your Wi-Fi. The Studio picks the pins
   itself (no boot, UART, USB or flash pins). Templates that do not work on the board are greyed out. Pro mode shows
   everything.
@@ -29,6 +31,7 @@ The panel appears in the Home Assistant sidebar (administrators only). The panel
 - **Web server, Wi-Fi & secrets:** web server (v1–v3, auth, OTA upload), Wi-Fi/secrets stored once, per-device keys
   in a separate `secrets.yaml` tab, fallback hotspot, static IP, API encryption, OTA protection, diagnostic entities
   (status, Wi-Fi signal, uptime, IP, SSID, BSSID, MAC, restart button, debug sensors).
+- **Export / import:** save a project as a file (without keys and passwords; new ones are generated on load) and load it again.
 - **Save to ESPHome:** write the YAML directly into your ESPHome folder or into the ESPHome Device Builder (with
   login). Existing files are backed up as `.bak`; secrets are only added, never overwritten.
 - **Checks:** duplicate pins, duplicate names, invalid device names, missing pull-ups, ADC pins and more are reported

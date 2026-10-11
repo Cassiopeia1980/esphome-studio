@@ -278,7 +278,7 @@ check("Debug-Intervall-Feld erscheint", !!([...card("WLAN").querySelectorAll("in
   await sleep(1200);
   const wiz2 = card("Los geht");
   const tpls = [...wiz2.querySelectorAll(".tpl")];
-  check("11 Vorlagen", tpls.length === 11, String(tpls.length));
+  check("17 Vorlagen", tpls.length === 17, String(tpls.length));
   const strip = tpls.find((t) => t.textContent.includes("LED-Streifen"));
   check("ESP32: LED-Streifen verfügbar", !strip.disabled);
   [...wiz2.querySelectorAll(".chip")].find((c) => c.textContent.includes("ESP-01")).click();
@@ -329,6 +329,35 @@ check("Debug-Intervall-Feld erscheint", !!([...card("WLAN").querySelectorAll("in
     }
     check("Vorlagen-Dateien geschrieben", n > 30, String(n));
   }
+}
+
+// Projekt exportieren und wieder laden
+{
+  let captured = null;
+  window.URL.createObjectURL = (blob) => { captured = blob; return "blob:test"; };
+  window.URL.revokeObjectURL = () => {};
+  window.HTMLAnchorElement.prototype.click = function () {};
+  const exp = button(root, "Exportieren");
+  check("Export-Schaltfläche da", !!exp);
+  if (exp) {
+    exp.click();
+    const text = captured ? await captured.text() : "";
+    const data = text ? JSON.parse(text) : null;
+    check("Export enthält Projekt ohne Schlüssel", data?.format === "esphome-studio-project" && data.project.api.key === "" && data.project.ota.password === "" && Array.isArray(data.project.components), text.slice(0, 120));
+    const name = data.project.name;
+    el.p.name = "anderer-name";
+    await el._importProjectFile({ text: async () => text });
+    await settle();
+    check("Import stellt Projekt wieder her", el.p.name === name && el.pid === null && el.dirty === true);
+    check("Import erzeugt neue Schlüssel", el.p.api.key.length > 10 && el.p.ota.password.length > 5);
+    await el._importProjectFile({ text: async () => "kein json" });
+    check("Ungültige Datei ändert nichts", el.p.name === name);
+  }
+}
+
+{
+  const bad = [...root.querySelectorAll("*")].flatMap((n) => [...n.childNodes].filter((c) => c.nodeType === 3 && /^(null|undefined|NaN)$/.test(c.textContent.trim())));
+  check("Kein verirrtes „null“ im Panel", bad.length === 0, String(bad.length));
 }
 
 console.log(`\nBackend-Aufrufe: ${calls}, Fehler: ${failures}`);

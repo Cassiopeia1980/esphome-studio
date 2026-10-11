@@ -32,6 +32,18 @@ const TEMPLATES = [
     name: "kontakt", friendly: "Kontakt", comps: [{ type: "binary_sensor", name: "Tür", options: { device_class: "door" } }] },
   { id: "ir", icon: "📡", title: "Infrarot-Sender", text: "Sendet IR-Befehle, z. B. für Klimaanlage, TV oder Soundbar.",
     name: "ir-sender", friendly: "IR-Sender", comps: [{ type: "ir_transmitter", name: "IR-Sender" }] },
+  { id: "pir", icon: "🚶", title: "Bewegungsmelder (PIR)", text: "Meldet Bewegung, z. B. mit einem HC-SR501-Modul.",
+    name: "bewegungsmelder", friendly: "Bewegungsmelder", comps: [{ type: "binary_sensor", name: "Bewegung", options: { device_class: "motion" } }] },
+  { id: "relay2", icon: "🔌", title: "Zwei Relais", text: "Zwei getrennt schaltbare Ausgänge, z. B. ein Doppelrelais-Modul.",
+    name: "doppelrelais", friendly: "Doppelrelais", comps: [{ type: "switch", name: "Relais 1" }, { type: "switch", name: "Relais 2" }] },
+  { id: "sht", icon: "💧", title: "Temperatur & Luftfeuchte (SHT3x)", text: "Genauer I²C-Sensor, die bessere Alternative zum DHT22.",
+    name: "sht-sensor", friendly: "SHT-Sensor", comps: [{ type: "sht3xd", name: "Klima" }] },
+  { id: "lux", icon: "☀️", title: "Helligkeit (BH1750)", text: "Misst die Helligkeit in Lux über I²C.",
+    name: "lichtsensor", friendly: "Lichtsensor", comps: [{ type: "bh1750", name: "Helligkeit" }] },
+  { id: "dist", icon: "📏", title: "Abstand / Füllstand (HC-SR04)", text: "Ultraschall-Entfernungsmesser, z. B. für Füllstand von Zisterne oder Tank.",
+    name: "abstandssensor", friendly: "Abstandssensor", comps: [{ type: "ultrasonic", name: "Abstand" }] },
+  { id: "volt", icon: "🔋", title: "Spannung messen (Analog)", text: "Liest den Analog-Eingang, z. B. für Akku oder Potentiometer.",
+    name: "spannungsmesser", friendly: "Spannungsmesser", comps: [{ type: "adc", name: "Analog" }] },
 ];
 const QUICK_BOARDS = [["d1_mini", "Wemos D1 Mini (ESP8266)"], ["nodemcuv2", "NodeMCU (ESP8266)"], ["esp01_1m", "ESP-01 (ESP8266)"],
   ["esp32dev", "ESP32 DevKit"], ["esp32-c3-devkitm-1", "ESP32-C3"], ["cb2s", "Tuya CB2S (Beken)"], ["rpipicow", "Raspberry Pi Pico W"]];
@@ -323,7 +335,7 @@ class ESPHomeStudioPanel extends HTMLElement {
       await this._reloadList();
       this._renderAll();
     } catch (err) {
-      this._toast(`Speichern fehlgeschlagen: ${err?.message || "Fehler"}`);
+      this._toast(`Speichern fehlgeschlagen: ${err?.message || tx("Fehler")}`);
     }
   }
 
@@ -352,6 +364,56 @@ class ESPHomeStudioPanel extends HTMLElement {
     this._generate();
   }
 
+  // Projekt als Datei sichern (ohne Schlüssel und Passwörter, die werden beim Laden neu erzeugt)
+  _exportProject() {
+    const proj = clone(this.p);
+    if (proj.api) proj.api.key = "";
+    if (proj.ota) proj.ota.password = "";
+    if (proj.wifi) proj.wifi.ap_password = "";
+    if (proj.web) proj.web.auth_password = "";
+    delete proj.id;
+    delete proj.updated;
+    const file = `${proj.name || tx("projekt")}.esphome-studio.json`;
+    this._download(file, JSON.stringify({ format: "esphome-studio-project", version: this.meta?.version || "", project: proj }, null, 2));
+    this._toast("Projekt exportiert. Schlüssel und Passwörter sind nicht enthalten.");
+  }
+
+  async _importProjectFile(file) {
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const src = data?.format === "esphome-studio-project" ? data.project : null;
+      if (!src || typeof src !== "object" || !Array.isArray(src.components) || typeof src.board !== "string") throw new Error("format");
+      const base = (await this._ws("new", { board: src.board })).project;
+      const merge = (a, b) => {
+        for (const [k, v] of Object.entries(b)) {
+          if (v && typeof v === "object" && !Array.isArray(v) && a[k] && typeof a[k] === "object" && !Array.isArray(a[k])) merge(a[k], v);
+          else a[k] = v;
+        }
+        return a;
+      };
+      const proj = merge(base, src);
+      proj.api = proj.api || {};
+      proj.ota = proj.ota || {};
+      proj.wifi = proj.wifi || {};
+      proj.api.key = (await this._ws("random", { kind: "api" })).value;
+      proj.ota.password = (await this._ws("random", { kind: "ota" })).value;
+      proj.wifi.ap_password = (await this._ws("random", { kind: "ap" })).value;
+      if (proj.web && proj.web.auth) proj.web.auth_password = "";
+      delete proj.id;
+      this.p = proj;
+      this.pid = null;
+      await this._ensureBoard(this.p.board);
+      this.dirty = true;
+      this._wizardOff = true;
+      this._renderAll();
+      this._generate();
+      this._toast("Projekt geladen. Neue Schlüssel wurden erzeugt, bitte speichern.");
+    } catch {
+      this._toast("Die Datei ist kein ESPHome-Studio-Projekt.");
+    }
+  }
+
   // WLAN-Zugangsdaten zuerst speichern, dann neu erzeugen (der Generator liest sie aus dem Speicher)
   _saveSecretsSoon() {
     clearTimeout(this._secTimer);
@@ -360,7 +422,7 @@ class ESPHomeStudioPanel extends HTMLElement {
         const res = await this._ws("set_secrets", { secrets: { wifi_ssid: this.secrets.wifi_ssid || "", wifi_password: this.secrets.wifi_password || "" } });
         this.secrets = res.secrets || this.secrets;
       } catch (err) {
-        this._toast(`Zugangsdaten konnten nicht gespeichert werden: ${err?.message || "Fehler"}`);
+        this._toast(`Zugangsdaten konnten nicht gespeichert werden: ${err?.message || tx("Fehler")}`);
       }
       this._generate();
     }, 400);
@@ -697,6 +759,10 @@ class ESPHomeStudioPanel extends HTMLElement {
         h("button", { class: "primary", onClick: () => this._save() }, "Speichern"),
         h("button", { onClick: async () => { await this._newProject(); this._renderAll(); this._generate(); } }, "Neu"),
         h("button", { onClick: () => this._duplicate() }, "Duplizieren"),
+        h("button", { title: "Projekt als Datei sichern (ohne Schlüssel und Passwörter)", onClick: () => this._exportProject() }, "Exportieren"),
+        h("button", { title: "Projekt aus einer Datei laden", onClick: () => this._projFile.click() }, "Aus Datei laden"),
+        this._projFile = h("input", { type: "file", accept: ".json,application/json", style: "display:none",
+          onChange: (e) => { this._importProjectFile(e.target.files[0]); e.target.value = ""; } }),
         this.simple ? null : h("button", { onClick: () => { this._importOpen = !this._importOpen; this._renderAll(); } }, "YAML importieren"),
         h("span", { class: "spacer" }),
         h("button", { class: "danger", onClick: () => this._delete() }, "Löschen")),
@@ -727,7 +793,7 @@ class ESPHomeStudioPanel extends HTMLElement {
     try {
       res = await this._ws("import", { yaml: this._importText, secrets: this._importSecrets || "" });
     } catch (err) {
-      this._importError = `Import fehlgeschlagen: ${err?.message || "Fehler"}`;
+      this._importError = `Import fehlgeschlagen: ${err?.message || tx("Fehler")}`;
       this._renderAll();
       return;
     }
@@ -1047,7 +1113,7 @@ class ESPHomeStudioPanel extends HTMLElement {
           const id = `x:${x.uid}:${n}`;
           const u = usage[id];
           const other = u && !(u.comp === c && u.pin?.key === ps.key);
-          return h("option", { value: id, disabled: !!other }, `Pin ${n}${other ? ` (belegt: ${u.comp?.name})` : ""}`);
+          return h("option", { value: id, disabled: !!other }, `Pin ${n}${other ? tx(` (belegt: ${u.comp?.name})`) : ""}`);
         })));
       }
     }
@@ -1207,7 +1273,7 @@ class ESPHomeStudioPanel extends HTMLElement {
     for (const f of e.fields) {
       const k = "f_" + f.key;
       const lbl = f.required ? `${f.label} *` : f.label;
-      const def = f.default !== "" && f.default != null ? `Standard: ${f.default}` : "";
+      const def = f.default !== "" && f.default != null ? tx(`Standard: ${f.default}`) : "";
       if (f.type === "bool") {
         ctl.push(h("label", { class: "check" }, h("input", { type: "checkbox", checked: o[k] === undefined || o[k] === "" ? String(f.default).toLowerCase() === "true" : !!o[k], onChange: (ev) => set(k, ev.target.checked) }), h("span", {}, lbl)));
       } else if (f.type === "enum") {
@@ -1218,7 +1284,7 @@ class ESPHomeStudioPanel extends HTMLElement {
         ctl.push(this._field(lbl, h("input", { type: "text", value: o[k] ?? "", placeholder: def, onInput: (ev) => set(k, ev.target.value) })));
       }
     }
-    if (e.has_interval) ctl.push(this._field("Aktualisierung", h("input", { type: "text", value: o.interval ?? "", placeholder: e.interval_default ? `Standard: ${e.interval_default}` : "z. B. 60s", onInput: (ev) => set("interval", ev.target.value) })));
+    if (e.has_interval) ctl.push(this._field("Aktualisierung", h("input", { type: "text", value: o.interval ?? "", placeholder: e.interval_default ? tx(`Standard: ${e.interval_default}`) : "z. B. 60s", onInput: (ev) => set("interval", ev.target.value) })));
     if (ctl.length) body.push(h("div", { class: "grid", style: "margin-top:10px" }, ctl));
     if (e.subs?.length) {
       body.push(h("div", { class: "subs" }, h("small", { class: "hint" }, e.self_entity ? "Zusätzliche Werte:" : "Messwerte (jeder wird eine eigene Entität in Home Assistant):"),
@@ -1321,11 +1387,11 @@ class ESPHomeStudioPanel extends HTMLElement {
     const isYaml = this.tab === "yaml";
     const text = isYaml ? o.yaml : (o.secrets || "# Nicht nötig: Die Zugangsdaten stehen direkt im YAML.\n");
     const tabBtn = (id, label) => h("button", { class: `tab ${this.tab === id ? "active" : ""}`, onClick: () => { this.tab = id; this._renderOutput(); } }, label);
-    const filename = isYaml ? `${this.p?.name || "geraet"}.yaml` : "secrets-ergaenzung.yaml";
+    const filename = isYaml ? `${this.p?.name || tx("geraet")}.yaml` : "secrets-ergaenzung.yaml";
     const copyBtn = h("button", { class: "primary", disabled: !o.ok && isYaml, onClick: async () => {
       const okc = await this._copy(text); copyBtn.textContent = tx(okc ? "Kopiert ✓" : "Markiere den Text und kopiere ihn von Hand");
       setTimeout(() => { copyBtn.textContent = tx("Kopieren"); }, 2000); } }, "Kopieren");
-    this._outEl.replaceChildren(
+    this._outEl.replaceChildren(...[
       h("h2", {}, "Ergebnis", h("span", { class: `badge ${o.ok ? "ok" : "bad"}` }, o.ok ? "bereit" : `${o.errors.length} Fehler`)),
       h("div", { class: "tabs" }, tabBtn("yaml", "ESPHome YAML"), tabBtn("secrets", "secrets.yaml")),
       h("div", { class: "msgs" },
@@ -1340,7 +1406,7 @@ class ESPHomeStudioPanel extends HTMLElement {
       isYaml ? this._deployBox() : null,
       h("p", { class: "hint" }, isYaml
         ? "In ESPHome ein neues Gerät anlegen (oder ein vorhandenes bearbeiten), den Inhalt ersetzen und installieren. Erstes Flashen per USB, danach per WLAN."
-        : "Diese Zeilen in die secrets.yaml von ESPHome einfügen. WLAN-Name und -Passwort nur einmal, die Schlüssel mit Gerätenamen gelten pro Gerät."));
+        : "Diese Zeilen in die secrets.yaml von ESPHome einfügen. WLAN-Name und -Passwort nur einmal, die Schlüssel mit Gerätenamen gelten pro Gerät.")].filter(Boolean));
     this._updateDirty();
   }
 
@@ -1376,11 +1442,11 @@ class ESPHomeStudioPanel extends HTMLElement {
     } catch { /* Projekt-Speichern ist optional */ }
     try {
       const r = await this._ws("deploy", { project: this.p });
-      const parts = [`Gespeichert: ${r.where}${r.backup ? " (alte Datei als .bak gesichert)" : ""}.`];
+      const parts = [`${tx("Gespeichert:")} ${r.where}${r.backup ? tx(" (alte Datei als .bak gesichert)") : ""}.`];
       if (r.secrets_added?.length) parts.push(`secrets.yaml ergänzt: ${r.secrets_added.join(", ")}.`);
       if (r.secrets_conflicts?.length) parts.push(`Nicht überschrieben (anderer Wert in der secrets.yaml): ${r.secrets_conflicts.join(", ")}. Gerät dann ggf. von Hand angleichen.`);
       this._deployMsg = { text: parts.join(" ") };
-      if (r.warning) this._deployMsg = { err: true, text: `${parts.join(" ")} ACHTUNG: ${r.warning}` };
+      if (r.warning) this._deployMsg = { err: true, text: `${parts.join(" ")} ${tx("ACHTUNG:")} ${r.warning}` };
     } catch (e) {
       this._deployMsg = { err: true, text: e?.message || "Speichern in ESPHome ist fehlgeschlagen." };
     }
@@ -1400,7 +1466,7 @@ class ESPHomeStudioPanel extends HTMLElement {
   }
 
   _download(name, text) {
-    const url = URL.createObjectURL(new Blob([text], { type: "text/yaml;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob([text], { type: name.endsWith(".json") ? "application/json" : "text/yaml;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url; a.download = name;
     this.shadowRoot.append(a); a.click(); a.remove();

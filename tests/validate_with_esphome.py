@@ -199,6 +199,27 @@ def free(board, n, pwm=False, skip=0):
     return ids[skip:skip + n]
 
 
+# --- Vorlagen des Start-Assistenten (0.9.0) ---------------------------------------
+_f32 = [x for x in free("esp32dev", 12) if x not in ("GPIO33", "GPIO21", "GPIO22")][:6]
+SAMPLES["vorlagen-esp32"] = project("esp32dev", "vorlagen-esp32", [
+    comp("binary_sensor", "Bewegung", {"pin": _f32[0]}, device_class="motion"),
+    comp("switch", "Relais 1", {"pin": _f32[1]}),
+    comp("switch", "Relais 2", {"pin": _f32[2]}),
+    comp("sht3xd", "Klima"),
+    comp("bh1750", "Helligkeit"),
+    comp("ultrasonic", "Abstand", {"trigger": _f32[3], "echo": _f32[4]}),
+    comp("adc", "Analog", {"pin": "GPIO33"}),
+])
+_f8266 = ["GPIO12", "GPIO13", "GPIO14"]
+SAMPLES["vorlagen-d1"] = project("d1_mini", "vorlagen-d1", [
+    comp("binary_sensor", "Bewegung", {"pin": _f8266[0]}, device_class="motion"),
+    comp("sht3xd", "Klima"),
+    comp("bh1750", "Helligkeit"),
+    comp("ultrasonic", "Abstand", {"trigger": _f8266[1], "echo": _f8266[2]}),
+    comp("adc", "Analog", {"pin": "A0"}),
+])
+
+
 def lt_sample(key, board):
     pw = free(board, 4, pwm=True)
     used = set(pw)

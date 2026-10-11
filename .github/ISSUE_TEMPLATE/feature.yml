@@ -1,0 +1,14 @@
+name: Wunsch / Feature request
+description: Neue Vorlage, Komponente oder Funktion vorschlagen / Suggest a template, component or feature
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Was wünschst du dir? / What would you like?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Wofür brauchst du es? / What do you need it for?

@@ -28,14 +28,16 @@ const root = el.shadowRoot;
 const fire = (n, type) => n.dispatchEvent(new window.Event(type, { bubbles: true }));
 
 // Erkennung deutscher Reste: Umlaute/ß oder typische deutsche Wörter
-const DE = /[äöüÄÖÜß]|\b(und|oder|nicht|der|die|das|ein|eine|für|mit|bei|wird|werden|Gerät|Baustein|Einstellungen|Speichern|Löschen|Hinzufügen|Passwort|Zugangsdaten|Laufzeit|Fehler|Treffer|Wähle|Hängt|belegt|noch|auch|nur|ohne|wenn|dann|nach|oben|unten|Seite|Ziel|Ordner|Adresse|Hinweis)\b/;
+const DE = /^(null|undefined|NaN)$|[äöüÄÖÜß]|\b(und|oder|nicht|der|die|das|ein|eine|für|mit|bei|wird|werden|Gerät|Baustein|Einstellungen|Speichern|Löschen|Hinzufügen|Passwort|Zugangsdaten|Laufzeit|Fehler|Treffer|Wähle|Hängt|belegt|noch|auch|nur|ohne|wenn|dann|nach|oben|unten|Seite|Ziel|Ordner|Adresse|Hinweis)\b/;
 const leftovers = new Set();
+const KEYS = new Set(Object.entries((await hass.connection.sendMessagePromise({ type: "esphome_studio/i18n", lang: "en" })).dict)
+  .filter(([k, v]) => k.trim() !== v.trim() && k.length > 3 && !/^\{\d/.test(k)).map(([k]) => k.trim()));
 const scan = (label) => {
   const walk = (node) => {
     for (const n of node.childNodes) {
       if (n.nodeType === 3) {
         const tx = n.textContent.trim();
-        if (tx && DE.test(tx) && n.parentElement?.tagName !== "PRE" && !n.parentElement?.closest?.("pre,textarea,.code")) leftovers.add(`[${label}] ${tx.slice(0, 140)}`);
+        if (tx && (DE.test(tx) || KEYS.has(tx)) && n.parentElement?.tagName !== "PRE" && !n.parentElement?.closest?.("pre,textarea,.code")) leftovers.add(`[${label}] ${tx.slice(0, 140)}`);
       } else if (n.nodeType === 1) {
         for (const a of ["title", "placeholder"]) { const v = n.getAttribute?.(a); if (v && DE.test(v)) leftovers.add(`[${label}] @${a}: ${v.slice(0, 140)}`); }
         if (n.tagName !== "STYLE" && n.tagName !== "PRE" && n.tagName !== "TEXTAREA") walk(n);

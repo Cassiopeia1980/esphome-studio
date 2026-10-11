@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0
+- 17 Vorlagen (neu: Zwei Relais, Bewegungsmelder, SHT3x, BH1750, HC-SR04, Spannung messen)
+- Projekt exportieren/laden als Datei (ohne Schlüssel und Passwörter)
+- Fix: verirrter Text „null“ im Ergebnis-Bereich; fehlende englische Texte ergänzt
+- CI: Panel-Tests (de/en) und `esphome config` (de/en); monatlicher Daten-Update-Workflow; Issue-Vorlagen; Screenshots
+
 ## 0.8.0
 - Zweisprachig: Deutsch und English, Sprachauswahl im Panel (Standard: Sprache von Home Assistant)
 - Oberfläche, Katalog, Boards, Meldungen, Import und die erzeugten YAML-Namen/-Kommentare werden übersetzt
