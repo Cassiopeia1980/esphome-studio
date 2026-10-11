@@ -63,6 +63,11 @@ def need_auth_flag(exc: Exception) -> bool:
     return "authenticat" in t or "unauthor" in t or "auth" in t and "required" in t
 
 
+def version_tuple(v: str) -> tuple[int, int]:
+    m = re.match(r"^(\d+)\.(\d+)", v or "")
+    return (int(m.group(1)), int(m.group(2))) if m else (9999, 0)
+
+
 def check_name(name: str) -> str:
     if not NAME_RE.match(name or ""):
         raise DeployError("Der Gerätename ist ungültig (nur Kleinbuchstaben, Ziffern, - und _).")
@@ -111,6 +116,7 @@ async def write_to_dashboard(session: Any, base_url: str, name: str, yaml_text: 
         async with session.ws_connect(f"{base}/ws", timeout=15) as ws:
             counter = 0
             need_auth = [False]
+            version = [""]
 
             async def cmd(command: str, **args: Any) -> Any:
                 nonlocal counter
@@ -122,6 +128,8 @@ async def write_to_dashboard(session: Any, base_url: str, name: str, yaml_text: 
                     if m.get("message_id") != mid:
                         if m.get("requires_auth"):
                             need_auth[0] = True
+                        if m.get("esphome_version"):
+                            version[0] = str(m["esphome_version"])
                         continue
                     if "result" in m:
                         return m["result"]
@@ -143,6 +151,7 @@ async def write_to_dashboard(session: Any, base_url: str, name: str, yaml_text: 
                 else:
                     await cmd("config/set_secret", key=k, value=v)
                     result["secrets_added"].append(k)
+            result["esphome_version"] = version[0]
             return result
     except DeployError as exc:
         if need_auth_flag(exc) and not username:

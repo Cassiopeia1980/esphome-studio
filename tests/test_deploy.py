@@ -73,7 +73,7 @@ async def test_dashboard_protocol_with_fake_device_builder(aiohttp_server, socke
     async def ws_handler(request):
         ws = web.WebSocketResponse()
         await ws.prepare(request)
-        await ws.send_json({"server_version": "1.0", "requires_auth": False})
+        await ws.send_json({"server_version": "1.0", "esphome_version": "2026.8.2", "requires_auth": False})
         async for m in ws:
             msg = m.json()
             seen.append((msg["command"], msg["args"]))
@@ -89,6 +89,7 @@ async def test_dashboard_protocol_with_fake_device_builder(aiohttp_server, socke
     async with aiohttp.ClientSession() as s:
         r = await dp.write_to_dashboard(s, f"http://127.0.0.1:{server.port}", "kueche", "esphome:\n", BLOCK)
     assert r["secrets_added"] == ["wifi_password", "kueche_api_key"] and r["secrets_conflicts"] == ["wifi_ssid"]
+    assert r["esphome_version"] == "2026.8.2"
     cmds = [c for c, _ in seen]
     assert cmds[:2] == ["config/get_secrets", "devices/create"] and cmds.count("config/set_secret") == 2
     assert dict(seen)["devices/create"]["overwrite"] is True
@@ -109,3 +110,8 @@ async def test_password_is_never_returned(setup, hass):  # noqa: F811
     assert r["result"]["has_password"] is True
     r = await call(ws, "deploy_settings", dashboard_user="")  # ohne Benutzer kein Passwort
     assert r["result"]["has_password"] is False
+
+
+def test_version_tuple():
+    assert dp.version_tuple("2026.8.2") == (2026, 8) and dp.version_tuple("2026.9.1") == (2026, 9)
+    assert dp.version_tuple("") > (2026, 9)  # unbekannt -> keine Warnung

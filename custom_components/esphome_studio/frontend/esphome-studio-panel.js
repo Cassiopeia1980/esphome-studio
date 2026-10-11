@@ -807,7 +807,7 @@ class ESPHomeStudioPanel extends HTMLElement {
           h("div", { class: "row" }, h("input", { type: "text", value: this.p.api.key, readOnly: true }), randomBtn("api", "api.key")))) : null,
         this._check("ota.enabled", "Updates über WLAN (OTA)", "", true),
         this.p.ota.enabled ? this._select("ota.mode", "OTA-Absicherung",
-          [["encryption", "Verschlüsselt mit API-Schlüssel (empfohlen)"], ["password", "Passwort"], ["none", "Keine"]], "", true) : null,
+          [["encryption", "Verschlüsselt mit API-Schlüssel (empfohlen, ab ESPHome 2026.9)"], ["password", "Passwort (für ältere ESPHome-Versionen)"], ["none", "Keine"]], "Hast du ESPHome älter als 2026.9 (steht unten im Device Builder), bitte „Passwort“ wählen. Sonst meldet ESPHome „encryption is an invalid option“.", true) : null,
         this.p.ota.enabled && this.p.ota.mode === "password" ? h("div", { class: "grid" }, this._field("OTA-Passwort",
           h("div", { class: "row" }, h("input", { type: "text", value: this.p.ota.password, readOnly: true }), randomBtn("ota", "ota.password")))) : null,
         h("h3", {}, "Zusätze"),
@@ -1302,6 +1302,7 @@ class ESPHomeStudioPanel extends HTMLElement {
       if (r.secrets_added?.length) parts.push(`secrets.yaml ergänzt: ${r.secrets_added.join(", ")}.`);
       if (r.secrets_conflicts?.length) parts.push(`Nicht überschrieben (anderer Wert in der secrets.yaml): ${r.secrets_conflicts.join(", ")}. Gerät dann ggf. von Hand angleichen.`);
       this._deployMsg = { text: parts.join(" ") };
+      if (r.warning) this._deployMsg = { err: true, text: `${parts.join(" ")} ACHTUNG: ${r.warning}` };
     } catch (e) {
       this._deployMsg = { err: true, text: e?.message || "Speichern in ESPHome ist fehlgeschlagen." };
     }

@@ -31,7 +31,7 @@ from .const import (
     VERSION,
 )
 from .generator import default_project, generate, new_ap_password, new_api_key, new_password
-from .deploy import DEFAULT_DIR, DeployError, write_to_dashboard, write_to_folder
+from .deploy import DEFAULT_DIR, DeployError, version_tuple, write_to_dashboard, write_to_folder
 from .importer import import_yaml
 
 _LOGGER = logging.getLogger(__name__)
@@ -353,4 +353,10 @@ async def ws_deploy(hass, connection, msg):
     except OSError as exc:
         connection.send_error(msg["id"], "deploy_failed", f"Schreiben fehlgeschlagen: {exc.strerror or exc}")
         return
+    ota_mode = (msg["project"].get("ota") or {}).get("mode", "encryption")
+    if (ota_mode == "encryption" and msg["project"].get("ota", {}).get("enabled", True)
+            and out.get("esphome_version") and version_tuple(out["esphome_version"]) < (2026, 9)):
+        out["warning"] = (f"Dein ESPHome ist Version {out['esphome_version']}. Die OTA-Verschlüsselung („ota: encryption“) gibt es erst "
+                          "ab 2026.9. Stelle unter „WLAN, Secrets & Sicherheit“ die OTA-Absicherung auf „Passwort“, "
+                          "sonst meldet ESPHome einen Fehler.")
     connection.send_result(msg["id"], out)
