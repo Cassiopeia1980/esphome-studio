@@ -16,15 +16,17 @@ from typing import Any
 from . import boards as B
 from .components import COMPONENTS
 from .catalog import catalog as _catalog
-from .generator import LOG_LEVELS, spec_for, PWM_PLATFORM, _effects, default_project, dump_yaml, new_component, slug
+from .i18n import T, tr, use_lang
+from .generator import _cur_lang, uptime_format, LOG_LEVELS, spec_for, PWM_PLATFORM, _effects, default_project, dump_yaml, new_component, slug
 from .yamlutil import Tag, load_text
 
 PLATFORM_KEYS = ("esp8266", "esp32", "rp2", "rp2040", "bk72xx", "rtl87xx", "ln882x")
 FX_FLAGS = ("fx_pulse", "fx_random", "fx_strobe")
-WIFI_INFO = {"ip": ("ip_address", "IP-Adresse", "mdi:ip-network"),
-             "ssid": ("ssid", "Verbunden mit (SSID)", "mdi:access-point-network"),
-             "bssid": ("bssid", "Verbunden mit (BSSID)", "mdi:access-point"),
-             "mac": ("mac_address", "MAC-Adresse", "mdi:ip")}
+def wifi_info_map() -> dict[str, tuple[str, str, str]]:
+    return {"ip": ("ip_address", T("IP-Adresse"), "mdi:ip-network"),
+            "ssid": ("ssid", T("Verbunden mit (SSID)"), "mdi:access-point-network"),
+            "bssid": ("bssid", T("Verbunden mit (BSSID)"), "mdi:access-point"),
+            "mac": ("mac_address", T("MAC-Adresse"), "mdi:ip")}
 INTERVAL_RE = re.compile(r"^\d+(\.\d+)?(ms|s|min|h)$")
 
 
@@ -936,31 +938,31 @@ class _Importer:
         def exact(item: dict[str, Any], expect: dict[str, Any]) -> bool:
             return item == expect
 
-        def diag_try(domain: str, item: dict[str, Any]) -> bool:
+        def diag_one(domain: str, item: dict[str, Any]) -> bool:
             plat = item.get("platform")
             if domain == "sensor" and plat == "wifi_signal" and exact(item, {
-                    "platform": "wifi_signal", "name": "WLAN-Signal", "update_interval": "60s",
+                    "platform": "wifi_signal", "name": T("WLAN-Signal"), "update_interval": "60s",
                     "entity_category": "diagnostic"}):
                 diag["wifi_signal"] = True
                 return True
             if domain == "sensor" and plat == "uptime" and exact(item, {
-                    "platform": "uptime", "name": "Laufzeit", "entity_category": "diagnostic"}):
+                    "platform": "uptime", "name": T("Laufzeit"), "entity_category": "diagnostic"}):
                 diag["uptime"] = True
                 return True
             if domain == "text_sensor" and plat == "uptime" and exact(item, {
-                    "platform": "uptime", "name": "Betriebszeit", "icon": "mdi:clock-start", "update_interval": "60s",
+                    "platform": "uptime", "name": T("Betriebszeit"), "icon": "mdi:clock-start", "update_interval": "60s",
                     "entity_category": "diagnostic",
-                    "format": {"separator": " ", "days": "T", "hours": "Std", "minutes": "Min", "seconds": "Sek"}}):
+                    "format": uptime_format(_cur_lang())}):
                 diag["uptime_text"] = True
                 return True
             if domain == "text_sensor" and plat == "wifi_info":
                 found = {}
-                for flag, (conf, label, icon) in WIFI_INFO.items():
+                for flag, (conf, label, icon) in wifi_info_map().items():
                     if conf in item:
                         if item[conf] != {"name": label, "icon": icon, "entity_category": "diagnostic"}:
                             return False
                         found[flag] = True
-                if set(item) - {"platform"} - {c for c, _, _ in WIFI_INFO.values()} or not found:
+                if set(item) - {"platform"} - {c for c, _, _ in wifi_info_map().values()} or not found:
                     return False
                 diag.update(found)
                 return True
@@ -969,15 +971,15 @@ class _Importer:
                 diag["status"] = True
                 return True
             if domain == "button" and plat == "restart" and exact(item, {
-                    "platform": "restart", "name": "Neustart", "entity_category": "config"}):
+                    "platform": "restart", "name": T("Neustart"), "entity_category": "config"}):
                 diag["restart"] = True
                 return True
             if domain == "sensor" and plat == "debug":
                 allowed = {"platform", "free", "block", "loop_time"}
                 if set(item) <= allowed:
-                    heap = {"free": {"name": "Freier Heap", "entity_category": "diagnostic"},
-                            "block": {"name": "Größter Heap-Block", "entity_category": "diagnostic"}}
-                    loop = {"loop_time": {"name": "Loop-Zeit", "entity_category": "diagnostic"}}
+                    heap = {"free": {"name": T("Freier Heap"), "entity_category": "diagnostic"},
+                            "block": {"name": T("Größter Heap-Block"), "entity_category": "diagnostic"}}
+                    loop = {"loop_time": {"name": T("Loop-Zeit"), "entity_category": "diagnostic"}}
                     got = {k: v for k, v in item.items() if k != "platform"}
                     if got and all({**heap, **loop}.get(k) == v for k, v in got.items()):
                         if "free" in got or "block" in got:
@@ -989,9 +991,16 @@ class _Importer:
                         return True
                 return False
             if domain == "text_sensor" and plat == "debug" and exact(item, {
-                    "platform": "debug", "reset_reason": {"name": "Reset-Grund", "entity_category": "diagnostic"}}):
+                    "platform": "debug", "reset_reason": {"name": T("Reset-Grund"), "entity_category": "diagnostic"}}):
                 diag["debug_reset"] = True
                 return True
+            return False
+
+        def diag_try(domain: str, item: dict[str, Any]) -> bool:
+            for lg in ("de", "en"):  # Standard-Diagnose-Entitäten in beiden Sprachen erkennen
+                with use_lang(lg):
+                    if diag_one(domain, item):
+                        return True
             return False
 
         fixed_doms = ("output", "one_wire", "light", "switch", "binary_sensor", "sensor", "text_sensor", "button")
@@ -1133,12 +1142,17 @@ class _Importer:
         p["components"] = comps
 
 
-def import_yaml(text: str, secrets_text: str = "") -> dict[str, Any]:
+def import_yaml(text: str, secrets_text: str = "", lang: str = "de") -> dict[str, Any]:
     """Liest eine ESPHome-YAML und liefert ``{ok, project, notes, unmapped, secrets, errors}``."""
-    try:
-        return _Importer(text, secrets_text).run()
-    except Unmapped as exc:  # pragma: no cover - sollte intern abgefangen sein
-        return {"ok": False, "project": None, "notes": [], "unmapped": [], "secrets": {}, "errors": [str(exc)]}
-    except Exception as exc:  # noqa: BLE001 - beliebige Benutzer-YAML darf nie abstürzen
-        return {"ok": False, "project": None, "notes": [], "unmapped": [], "secrets": {},
-                "errors": [f"Der Import ist fehlgeschlagen: {type(exc).__name__}: {exc}"]}
+    with use_lang(lang):
+        try:
+            res = _Importer(text, secrets_text).run()
+        except Unmapped as exc:  # pragma: no cover - sollte intern abgefangen sein
+            res = {"ok": False, "project": None, "notes": [], "unmapped": [], "secrets": {}, "errors": [str(exc)]}
+        except Exception as exc:  # noqa: BLE001 - beliebige Benutzer-YAML darf nie abstürzen
+            res = {"ok": False, "project": None, "notes": [], "unmapped": [], "secrets": {},
+                   "errors": [T("Der Import ist fehlgeschlagen: {0}: {1}", type(exc).__name__, exc)]}
+        if lang == "en":
+            for k in ("notes", "unmapped", "errors"):
+                res[k] = [tr(m) for m in res.get(k, [])]
+        return res

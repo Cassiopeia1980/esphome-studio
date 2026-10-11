@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from .i18n import tr
 from .yamlutil import load_text
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
@@ -27,7 +28,7 @@ def parse_secret_block(block: str) -> dict[str, str]:
     return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
 
 
-def merge_secrets(existing: str, block: str) -> tuple[str, list[str], list[str]]:
+def merge_secrets(existing: str, block: str, lang: str = "de") -> tuple[str, list[str], list[str]]:
     """Ergänzt fehlende Schlüssel. Vorhandene Schlüssel werden nie überschrieben.
 
     Rückgabe: (neuer Text, hinzugefügte Schlüssel, Schlüssel mit abweichendem Wert).
@@ -54,7 +55,7 @@ def merge_secrets(existing: str, block: str) -> tuple[str, list[str], list[str]]
     text = existing
     if text and not text.endswith("\n"):
         text += "\n"
-    text += "# von ESPHome Studio ergänzt\n" + "\n".join(lines) + "\n"
+    text += tr("# von ESPHome Studio ergänzt\n", lang) + "\n".join(lines) + "\n"
     return text, added, conflicts
 
 
@@ -74,7 +75,7 @@ def check_name(name: str) -> str:
     return name
 
 
-def write_to_folder(folder: str, name: str, yaml_text: str, secrets_block: str) -> dict[str, Any]:
+def write_to_folder(folder: str, name: str, yaml_text: str, secrets_block: str, lang: str = "de") -> dict[str, Any]:
     """Blockierend (im Executor aufrufen)."""
     check_name(name)
     d = Path(folder)
@@ -90,7 +91,7 @@ def write_to_folder(folder: str, name: str, yaml_text: str, secrets_block: str) 
     if secrets_block.strip():
         sp = d / "secrets.yaml"
         existing = sp.read_text(encoding="utf-8") if sp.exists() else ""
-        text, added, conflicts = merge_secrets(existing, secrets_block)
+        text, added, conflicts = merge_secrets(existing, secrets_block, lang)
         if added:
             if sp.exists():
                 sp.replace(d / "secrets.yaml.bak")

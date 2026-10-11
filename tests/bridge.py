@@ -12,19 +12,21 @@ state_file = Path(sys.argv[1])
 state = json.loads(state_file.read_text()) if state_file.exists() else {"projects": {}, "secrets": {}}
 msg = json.loads(sys.stdin.read())
 t = msg["type"].split("/")[1]
+lang = msg.get("lang") or "de"
+import importlib  # noqa: E402
+i18n = importlib.import_module("esphome_studio.i18n")
 
 if t == "meta":
-    res = {"version": "test", "boards": boards.boards_meta(), "types": components.components_meta(),
+    res = i18n.tr_struct({"version": "test", "boards": boards.boards_meta(), "types": components.components_meta(),
            "group_order": components.GROUP_ORDER,
-           "entity": __import__("importlib").import_module("esphome_studio.entity").entity_meta()}
+           "entity": importlib.import_module("esphome_studio.entity").entity_meta()}, lang)
 elif t == "catalog":
-    import importlib
     res = importlib.import_module("esphome_studio.catalog").catalog()
+    res = res if lang != "en" else i18n.tr_struct(res, lang)
 elif t == "board":
-    res = {"board": boards.board_detail(msg["key"])}
+    res = {"board": i18n.tr_struct(boards.board_detail(msg["key"]), lang)}
 elif t == "import":
-    import importlib
-    res = importlib.import_module("esphome_studio.importer").import_yaml(msg["yaml"], msg.get("secrets", ""))
+    res = importlib.import_module("esphome_studio.importer").import_yaml(msg["yaml"], msg.get("secrets", ""), lang)
 elif t == "list":
     res = {"projects": [{"id": k, "name": v["name"], "friendly_name": v.get("friendly_name", ""), "board": v["board"]}
                         for k, v in state["projects"].items()], "secrets": state["secrets"]}
@@ -37,13 +39,16 @@ elif t == "save":
 elif t == "delete":
     state["projects"].pop(msg["project_id"], None); res = {}
 elif t == "new":
-    res = {"project": gen.default_project(msg.get("board") or "d1_mini")}
+    with i18n.use_lang(lang):
+        res = {"project": gen.default_project(msg.get("board") or "d1_mini")}
 elif t == "generate":
-    res = gen.generate(msg["project"], state["secrets"])
+    res = gen.generate(msg["project"], state["secrets"], lang=lang)
 elif t == "set_secrets":
     state["secrets"].update(msg["secrets"]); res = {"secrets": state["secrets"]}
 elif t == "random":
     res = {"value": {"api": gen.new_api_key, "ota": gen.new_password, "ap": gen.new_ap_password}[msg["kind"]]()}
+elif t == "i18n":
+    res = {"dict": i18n.ui_dictionary(lang)}
 else:
     raise SystemExit(f"unbekannt: {t}")
 state_file.write_text(json.dumps(state))

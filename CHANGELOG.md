@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0
+- Zweisprachig: Deutsch und English, Sprachauswahl im Panel (Standard: Sprache von Home Assistant)
+- Oberfläche, Katalog, Boards, Meldungen, Import und die erzeugten YAML-Namen/-Kommentare werden übersetzt
+- Neuer Websocket-Befehl `i18n`, alle Befehle nehmen `lang` entgegen
+
 ## 0.7.2
 - Warnung, wenn der Device Builder älter als ESPHome 2026.9 ist und OTA-Verschlüsselung gewählt ist; Hinweis bei der OTA-Absicherung
 

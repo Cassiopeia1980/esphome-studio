@@ -1,5 +1,7 @@
 # ESPHome Studio
 
+🇩🇪 Deutsch · 🇬🇧 [English](README.en.md)
+
 Ein Konfigurator für ESPHome direkt in Home Assistant, ähnlich wie die GPIO-Konfiguration bei Tasmota:
 Board wählen, jedem Pin eine Funktion geben, WLAN und Secrets eintragen, fertig ist die ESPHome-YAML.
 Das Panel erscheint in der Seitenleiste von Home Assistant (nur für Administratoren).
@@ -128,6 +130,15 @@ Browser, das Flashen auf echter Hardware und neuere Home-Assistant-Versionen als
 
 Lizenz: MIT
 
+
+## Neu in 0.8.0
+
+- **Zweisprachig (Deutsch / English):** Oben rechts im Panel gibt es eine Sprachauswahl. Standard ist die Sprache von
+  Home Assistant, die Wahl wird im Browser gemerkt. Übersetzt sind Oberfläche, Katalog, Boards und Pin-Hinweise,
+  Fehler und Warnungen, der YAML-Import sowie die erzeugten Namen und Kommentare im YAML (z. B. „WiFi Signal“,
+  „Uptime“, „Restart“). Die englische YAML wird genauso mit `esphome config` geprüft, und der Import erkennt
+  Projekte in beiden Sprachen wieder. Weitere Sprachen: `i18n_en.json` und `i18n_ui_en.json` sind einfache
+  Wörterbücher (deutscher Text → Übersetzung), `tools/extract_i18n.py --missing` zeigt, was noch fehlt.
 
 ## Neu in 0.6.0
 

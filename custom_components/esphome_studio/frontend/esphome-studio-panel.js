@@ -142,6 +142,38 @@ const CSS = `
   .empty { padding: 14px; text-align: center; color: var(--secondary-text-color); font-size: 13px; }
 `;
 
+// --- Mehrsprachigkeit: deutsche Texte sind die Schlüssel, das englische Wörterbuch kommt vom Backend (Befehl "i18n") ---
+const I18N = { lang: "de", dict: {}, pats: [] };
+function i18nSetDict(dict) {
+  I18N.dict = { ...(dict || {}) };
+  for (const [k, v] of Object.entries(dict || {})) { const kt = k.trim(); if (kt && kt !== k && !(kt in I18N.dict)) I18N.dict[kt] = v.trim(); }
+  I18N.pats = Object.keys(I18N.dict).filter((k) => /\{\d+\}/.test(k)).map((k) => {
+    const esc = k.split(/\{\d+\}/).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const order = [...k.matchAll(/\{(\d+)\}/g)].map((m) => Number(m[1]));
+    return { re: new RegExp(`^${esc.join("([\\s\\S]+?)")}$`), order, en: I18N.dict[k], w: k.replace(/\{\d+\}/g, "").length };
+  }).sort((a, b) => b.w - a.w);
+}
+function tx(text) {
+  if (I18N.lang === "de" || typeof text !== "string" || !text) return text;
+  const hit = I18N.dict[text];
+  if (hit !== undefined) return hit;
+  for (const p of I18N.pats) {
+    const m = p.re.exec(text);
+    if (m) return p.en.replace(/\{(\d+)\}/g, (_, n) => { const idx = p.order.indexOf(Number(n)); return tx(m[idx + 1] ?? ""); });
+  }
+  const sym = /^([^\p{L}\p{N}"„(]+)(\S[\s\S]*)$/u.exec(text);
+  if (sym) { const r = tx(sym[2]); if (r !== sym[2]) return sym[1] + r; }
+  const sentences = text.split(/(?<=[.!?:]) +/);
+  if (sentences.length > 1) {
+    const out = sentences.map((x) => tx(x));
+    if (out.some((x, i) => x !== sentences[i])) return out.join(" ");
+  }
+  const lead = /^(\s*)([\s\S]*?)(\s*)$/.exec(text);
+  if (lead && (lead[1] || lead[3]) && lead[2]) return lead[1] + tx(lead[2]) + lead[3];
+  return text;
+}
+const TR_ATTRS = new Set(["title", "placeholder", "aria-label", "alt"]);
+
 function h(tag, props, ...kids) {
   const el = document.createElement(tag);
   let value;
@@ -152,11 +184,11 @@ function h(tag, props, ...kids) {
     else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2).toLowerCase(), v);
     else if (k === "value") { value = v; hasValue = true; }
     else if (k === "checked" || k === "disabled" || k === "selected" || k === "readOnly") el[k] = !!v;
-    else el.setAttribute(k, v === true ? "" : String(v));
+    else el.setAttribute(k, v === true ? "" : TR_ATTRS.has(k) ? tx(String(v)) : String(v));
   }
   for (const kid of kids.flat(Infinity)) {
     if (kid === null || kid === undefined || kid === false) continue;
-    el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    el.append(kid.nodeType ? kid : document.createTextNode(tx(String(kid))));
   }
   if (hasValue) el.value = value;
   return el;
@@ -183,6 +215,40 @@ class ESPHomeStudioPanel extends HTMLElement {
     this._showPw = false;
     this.simple = true;
     try { this.simple = globalThis.localStorage?.getItem("esphome_studio_mode") !== "pro"; } catch { /* Speicher gesperrt */ }
+    try { this._savedLang = globalThis.localStorage?.getItem("esphome_studio_lang") || ""; } catch { this._savedLang = ""; }
+  }
+
+  // Sprache: gespeicherte Wahl, sonst die Sprache von Home Assistant (Deutsch → Deutsch, sonst Englisch)
+  _initialLang() {
+    if (this._savedLang === "de" || this._savedLang === "en") return this._savedLang;
+    const ha = String(this._hass?.locale?.language || this._hass?.language || "de").toLowerCase();
+    return ha.startsWith("de") ? "de" : "en";
+  }
+
+  async _loadLang(lang) {
+    I18N.lang = lang;
+    i18nSetDict({});
+    if (lang !== "de") {
+      try { i18nSetDict((await this._ws("i18n")).dict); } catch { I18N.lang = "de"; }
+    }
+    document.documentElement.setAttribute("data-esphome-studio-lang", I18N.lang);
+  }
+
+  async _setLang(lang) {
+    if (lang === I18N.lang) return;
+    this._savedLang = lang;
+    try { globalThis.localStorage?.setItem("esphome_studio_lang", lang); } catch { /* egal */ }
+    await this._loadLang(lang);
+    try {
+      this.meta = await this._ws("meta");
+      const c = await this._ws("catalog");
+      this.catalog = { ...c, byId: Object.fromEntries(c.entries.map((e) => [e.id, e])) };
+      this.boardCache = {};
+      await this._ensureBoard(this.p.board);
+    } catch { /* alte Daten bleiben */ }
+    this._buildHead();
+    this._renderAll();
+    this._generate();
   }
 
   set hass(hass) {
@@ -202,11 +268,13 @@ class ESPHomeStudioPanel extends HTMLElement {
 
   // ------------------------------------------------------------ Backend ---
   _ws(type, payload = {}) {
-    return this._hass.connection.sendMessagePromise({ type: `esphome_studio/${type}`, ...payload });
+    return this._hass.connection.sendMessagePromise({ type: `esphome_studio/${type}`, lang: I18N.lang, ...payload });
   }
 
   async _boot() {
     try {
+      await this._loadLang(this._initialLang());
+      this._buildHead();
       this.meta = await this._ws("meta");
       this.catalog = { domains: {}, entries: [], byId: {} };
       this._ws("catalog").then((c) => {
@@ -217,7 +285,7 @@ class ESPHomeStudioPanel extends HTMLElement {
       if (this.projects.length) await this._open(this.projects[0].id, true);
       else await this._newProject();
     } catch (err) {
-      this.fatal = `ESPHome Studio konnte nicht starten: ${err?.message || JSON.stringify(err)}`;
+      this.fatal = tx("ESPHome Studio konnte nicht starten:") + ` ${err?.message || JSON.stringify(err)}`;
     }
     this._renderAll();
     this._generate();
@@ -261,7 +329,7 @@ class ESPHomeStudioPanel extends HTMLElement {
 
   async _delete() {
     if (!this.pid) { await this._newProject(); this._renderAll(); this._generate(); return; }
-    if (!confirm(`Projekt „${this.p.name}“ wirklich löschen?`)) return;
+    if (!confirm(tx(`Projekt „${this.p.name}“ wirklich löschen?`))) return;
     await this._ws("delete", { project_id: this.pid });
     await this._reloadList();
     if (this.projects.length) await this._open(this.projects[0].id, true);
@@ -273,7 +341,7 @@ class ESPHomeStudioPanel extends HTMLElement {
   async _duplicate() {
     const copy = clone(this.p);
     copy.name = this._suffixName(copy.name, "-kopie");
-    copy.friendly_name = copy.friendly_name ? `${copy.friendly_name} (Kopie)` : "";
+    copy.friendly_name = copy.friendly_name ? `${copy.friendly_name}${tx(" (Kopie)")}` : "";
     copy.api.key = (await this._ws("random", { kind: "api" })).value;
     copy.ota.password = (await this._ws("random", { kind: "ota" })).value;
     copy.wifi.ap_password = (await this._ws("random", { kind: "ap" })).value;
@@ -319,7 +387,7 @@ class ESPHomeStudioPanel extends HTMLElement {
         if (seq !== this._seq) return;
         this.out = res;
       } catch (err) {
-        this.out = { yaml: "", secrets: "", warnings: [], errors: [`Fehler beim Erzeugen: ${err?.message || err}`], ok: false };
+        this.out = { yaml: "", secrets: "", warnings: [], errors: [`${tx("Fehler beim Erzeugen:")} ${err?.message || err}`], ok: false };
       }
       this._renderOutput();
     }, 150);
@@ -327,7 +395,7 @@ class ESPHomeStudioPanel extends HTMLElement {
 
   _toast(text) {
     this._toastText = text;
-    if (this._banner) { this._banner.textContent = text; this._banner.style.display = "block"; }
+    if (this._banner) { this._banner.textContent = tx(text); this._banner.style.display = "block"; }
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => { if (this._banner) this._banner.style.display = "none"; }, 6000);
   }
@@ -337,10 +405,10 @@ class ESPHomeStudioPanel extends HTMLElement {
   spec(c) {
     if (c.type !== "generic") return this.type(c.type);
     const e = this.catalog?.byId?.[c.cat];
-    if (!e) return { label: `Unbekannt (${c.cat})`, pins: [], options: [], platforms: [] };
+    if (!e) return { label: tx(`Unbekannt (${c.cat})`), pins: [], options: [], platforms: [] };
     const uart = e.bus === "uart" ? [
-      { key: "_rx", label: "RX (Daten vom Sensor)", kind: "in", required: true },
-      { key: "_tx", label: "TX (zum Sensor, optional)", kind: "out", required: false }] : [];
+      { key: "_rx", label: tx("RX (Daten vom Sensor)"), kind: "in", required: true },
+      { key: "_tx", label: tx("TX (zum Sensor, optional)"), kind: "out", required: false }] : [];
     return { label: e.label, pins: [...uart, ...e.pins.map((p) => ({ key: p.key, label: p.label, kind: p.kind, required: p.required }))],
       needs_i2c: e.bus === "i2c", needs_spi: e.bus === "spi", options: [], platforms: e.platforms || [] };
   }
@@ -402,7 +470,7 @@ class ESPHomeStudioPanel extends HTMLElement {
     const spec = this.type(typeKey);
     const options = {};
     for (const o of spec.options) options[o.key] = o.default;
-    this.p.components.push({ uid: uid(), type: typeKey, name: this._uniqueName(DEFAULT_NAMES[typeKey] || spec.label), pins, options });
+    this.p.components.push({ uid: uid(), type: typeKey, name: this._uniqueName(tx(DEFAULT_NAMES[typeKey]) || spec.label), pins, options });
   }
 
   _removeComponent(c) {
@@ -439,12 +507,22 @@ class ESPHomeStudioPanel extends HTMLElement {
     this._left = h("div", { class: "col" });
     this._outEl = h("div", { class: "card out" });
     this._layout = h("div", { class: "layout" }, this._left, h("div", { class: "col" }, this._outEl));
-    this._head = h("div", { class: "toolbar" }, this._menu, h("div", { class: "title" }, "ESPHome Studio"), h("span", { class: "ver" }, ""),
-      h("label", { class: "mode", title: "Der einfache Modus zeigt nur das Wichtigste. Profi-Optionen sind dann ausgeblendet." },
-        this._modeBox = h("input", { type: "checkbox", checked: this.simple, onChange: (e) => this._setSimple(e.target.checked) }), "Einfacher Modus"));
+    this._head = h("div", { class: "toolbar" });
+    this._buildHead();
     this.shadowRoot.append(style, this._head, this._banner, this._layout);
     if (this.meta && this.p) { this._renderAll(); this._generate(); }
     else this._left.append(h("div", { class: "card" }, this.fatal || "Lade …"));
+  }
+
+  _buildHead() {
+    if (!this._head) return;
+    this._head.replaceChildren(this._menu, h("div", { class: "title" }, "ESPHome Studio"), h("span", { class: "ver" }, `v${this.meta?.version || ""}`),
+      h("label", { class: "mode", title: "Der einfache Modus zeigt nur das Wichtigste. Profi-Optionen sind dann ausgeblendet." },
+        this._modeBox = h("input", { type: "checkbox", checked: this.simple, onChange: (e) => this._setSimple(e.target.checked) }), "Einfacher Modus"),
+      h("label", { class: "mode lang", title: "Sprache / Language" }, "🌐 ",
+        this._langSel = h("select", { class: "langsel", onChange: (e) => this._setLang(e.target.value) },
+          h("option", { value: "de" }, "Deutsch"), h("option", { value: "en" }, "English"))));
+    this._langSel.value = I18N.lang;
   }
 
   _setSimple(v) {
@@ -508,7 +586,7 @@ class ESPHomeStudioPanel extends HTMLElement {
 
   _updateDirty() {
     const d = this._left.querySelector(".dirty");
-    if (d) { d.textContent = this.dirty ? "Nicht gespeichert" : "Gespeichert"; d.className = `badge dirty ${this.dirty ? "warn" : "ok"}`; }
+    if (d) { d.textContent = tx(this.dirty ? "Nicht gespeichert" : "Gespeichert"); d.className = `badge dirty ${this.dirty ? "warn" : "ok"}`; }
   }
 
   // --- Start-Assistent (Einfach-Modus) ---
@@ -553,7 +631,7 @@ class ESPHomeStudioPanel extends HTMLElement {
       const pins = this._autoPins(spec, new Set(created.flatMap((x) => Object.values(x.pins))));
       this._addComponent(c.type, pins || {});
       const comp = this.p.components.at(-1);
-      comp.name = this._uniqueName(c.name);
+      comp.name = this._uniqueName(tx(c.name));
       for (const [k, v] of Object.entries(c.options || {})) {
         const o = spec.options.find((x) => x.key === k);
         if (!o) continue;
@@ -563,8 +641,8 @@ class ESPHomeStudioPanel extends HTMLElement {
       created.push(comp);
     }
     if (!this.pid) {
-      if (!this.p.name || this.p.name === "neues-geraet") this.p.name = tpl.name;
-      if (!this.p.friendly_name || this.p.friendly_name === "Neues Gerät") this.p.friendly_name = tpl.friendly;
+      if (!this.p.name || this.p.name === "neues-geraet" || this.p.name === "new-device") this.p.name = tx(tpl.name);
+      if (!this.p.friendly_name || this.p.friendly_name === "Neues Gerät" || this.p.friendly_name === "New device") this.p.friendly_name = tx(tpl.friendly);
     }
     this._wizardOff = true;
     this._changed(true);
@@ -711,7 +789,7 @@ class ESPHomeStudioPanel extends HTMLElement {
       boardSel.replaceChildren(...[...groups].map(([g, list]) => h("optgroup", { label: g },
         list.map((b) => h("option", { value: b.key }, b.label)))));
       boardSel.value = this.p.board;
-      count.textContent = words.length ? `${n} Treffer von ${this.meta.boards.length} Boards` : `${this.meta.boards.length} Boards`;
+      count.textContent = words.length ? tx(`${n} Treffer von ${this.meta.boards.length} Boards`) : tx(`${this.meta.boards.length} Boards`);
     };
     const search = h("input", { type: "search", class: "board-search", placeholder: "Board suchen, z. B. d1, cb2s, esp32-s3, pico, wb2s …",
       onInput: (e) => fill(e.target.value) });
@@ -920,7 +998,7 @@ class ESPHomeStudioPanel extends HTMLElement {
         b.pins.map((pin) => {
           const bad = this._incompat(pin, kind);
           const other = usage[pin.id] && usage[pin.id].i2c !== `SPI ${key}`;
-          return h("option", { value: pin.id, disabled: !!bad || !!other }, `${pin.label}${bad ? ` (${bad})` : other ? " (belegt)" : pin.strapping ? " ⚠" : ""}`);
+          return h("option", { value: pin.id, disabled: !!bad || !!other }, `${pin.label}${bad ? ` (${tx(bad)})` : other ? tx(" (belegt)") : pin.strapping ? " ⚠" : ""}`);
         }));
       sel.value = cur[key] || "";
       return this._field(label, sel);
@@ -937,7 +1015,7 @@ class ESPHomeStudioPanel extends HTMLElement {
         b.pins.map((pin) => {
           const bad = this._incompat(pin, "io");
           const other = usage[pin.id] && !(usage[pin.id].i2c === key);
-          return h("option", { value: pin.id, disabled: !!bad || !!other }, `${pin.label}${bad ? ` (${bad})` : other ? " (belegt)" : pin.strapping ? " ⚠" : ""}`);
+          return h("option", { value: pin.id, disabled: !!bad || !!other }, `${pin.label}${bad ? ` (${tx(bad)})` : other ? tx(" (belegt)") : pin.strapping ? " ⚠" : ""}`);
         }));
       sel.value = this.p.i2c[key] || "";
       return this._field(label, sel);
@@ -957,7 +1035,7 @@ class ESPHomeStudioPanel extends HTMLElement {
         const mine = u?.comp === c && u?.pin?.key === ps.key;
         const other = u && !mine;
         const warn = pin.strapping || pin.uart || pin.usb || pin.psram;
-        const suffix = bad ? ` (${bad})` : other ? ` (belegt: ${u.comp ? u.comp.name : "I²C"})` : warn ? " ⚠" : "";
+        const suffix = bad ? ` (${tx(bad)})` : other ? tx(` (belegt: ${u.comp ? u.comp.name : "I²C"})`) : warn ? " ⚠" : "";
         return h("option", { value: pin.id, disabled: !!bad || !!other, title: pin.note || pin.strapping || "" }, `${pin.label}${suffix}`);
       }));
     // Pins von Port-Expandern (MCP23017, PCF8574 …), die im Projekt vorkommen
@@ -1245,8 +1323,8 @@ class ESPHomeStudioPanel extends HTMLElement {
     const tabBtn = (id, label) => h("button", { class: `tab ${this.tab === id ? "active" : ""}`, onClick: () => { this.tab = id; this._renderOutput(); } }, label);
     const filename = isYaml ? `${this.p?.name || "geraet"}.yaml` : "secrets-ergaenzung.yaml";
     const copyBtn = h("button", { class: "primary", disabled: !o.ok && isYaml, onClick: async () => {
-      const okc = await this._copy(text); copyBtn.textContent = okc ? "Kopiert ✓" : "Markiere den Text und kopiere ihn von Hand";
-      setTimeout(() => { copyBtn.textContent = "Kopieren"; }, 2000); } }, "Kopieren");
+      const okc = await this._copy(text); copyBtn.textContent = tx(okc ? "Kopiert ✓" : "Markiere den Text und kopiere ihn von Hand");
+      setTimeout(() => { copyBtn.textContent = tx("Kopieren"); }, 2000); } }, "Kopieren");
     this._outEl.replaceChildren(
       h("h2", {}, "Ergebnis", h("span", { class: `badge ${o.ok ? "ok" : "bad"}` }, o.ok ? "bereit" : `${o.errors.length} Fehler`)),
       h("div", { class: "tabs" }, tabBtn("yaml", "ESPHome YAML"), tabBtn("secrets", "secrets.yaml")),

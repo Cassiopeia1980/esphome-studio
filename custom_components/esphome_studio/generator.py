@@ -21,6 +21,7 @@ from typing import Any
 from .boards import BOARDS, NO_WIFI_CHIPS, PLATFORM_LABEL, board_has_wifi
 from .entity import apply_entity
 from .catalog import entry as catalog_entry, spec_for_entry
+from .i18n import T, tr, use_lang
 from .components import ENT_META, COMPONENTS, default_options
 from .yamlutil import Tag, load_text
 
@@ -191,6 +192,19 @@ def _reserved_ids() -> set[str]:
     return _RESERVED_IDS
 
 
+def _cur_lang() -> str:
+    from .i18n import LANG  # noqa: PLC0415
+
+    return LANG.get()
+
+
+def uptime_format(lang: str | None = None) -> dict[str, str]:
+    """Kurzformen für die Betriebszeit (Tage/Stunden/Minuten/Sekunden)."""
+    if lang == "en":
+        return {"separator": " ", "days": "d", "hours": "h", "minutes": "m", "seconds": "s"}
+    return {"separator": " ", "days": "T", "hours": "Std", "minutes": "Min", "seconds": "Sek"}
+
+
 def new_api_key() -> str:
     return base64.b64encode(os.urandom(32)).decode()
 
@@ -210,8 +224,8 @@ def new_uid() -> str:
 def default_project(board: str = "d1_mini") -> dict[str, Any]:
     b = BOARDS.get(board) or BOARDS["d1_mini"]
     return {
-        "name": "neues-geraet",
-        "friendly_name": "Neues Gerät",
+        "name": T("neues-geraet"),
+        "friendly_name": T("Neues Gerät"),
         "board": b["key"],
         "framework": "esp-idf",
         "log_level": "INFO",
@@ -519,8 +533,8 @@ def _effects(c: dict[str, Any], color: bool) -> list[dict[str, Any]]:
         fx.append({"pulse": {"name": "Schnelles Pulsieren", "transition_length": "0.5s", "update_interval": "0.5s"}})
         fx.append({"pulse": {"name": "Langsames Pulsieren", "transition_length": "1s", "update_interval": "2s"}})
     if _opt(c, "fx_random"):
-        fx.append({"random": {"name": "Langsam zufällig", "transition_length": "30s", "update_interval": "30s"}})
-        fx.append({"random": {"name": "Schnell zufällig", "transition_length": "4s", "update_interval": "5s"}})
+        fx.append({"random": {"name": T("Langsam zufällig"), "transition_length": "30s", "update_interval": "30s"}})
+        fx.append({"random": {"name": T("Schnell zufällig"), "transition_length": "4s", "update_interval": "5s"}})
     if _opt(c, "fx_strobe"):
         on: dict[str, Any] = {"state": True, "brightness": "100%"}
         if color:
@@ -1371,20 +1385,20 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
     # Diagnose-Entitäten
     diag = p.get("diag") or {}
     if diag.get("wifi_signal"):
-        ctx.add("sensor", {"platform": "wifi_signal", "name": "WLAN-Signal", "update_interval": "60s",
+        ctx.add("sensor", {"platform": "wifi_signal", "name": T("WLAN-Signal"), "update_interval": "60s",
                            "entity_category": "diagnostic"})
     if diag.get("uptime"):
-        ctx.add("sensor", {"platform": "uptime", "name": "Laufzeit", "entity_category": "diagnostic"})
+        ctx.add("sensor", {"platform": "uptime", "name": T("Laufzeit"), "entity_category": "diagnostic"})
     if diag.get("uptime_text"):
         ctx.add("text_sensor", {
-            "platform": "uptime", "name": "Betriebszeit", "icon": "mdi:clock-start", "update_interval": "60s",
+            "platform": "uptime", "name": T("Betriebszeit"), "icon": "mdi:clock-start", "update_interval": "60s",
             "entity_category": "diagnostic",
-            "format": {"separator": " ", "days": "T", "hours": "Std", "minutes": "Min", "seconds": "Sek"}})
+            "format": uptime_format(_cur_lang())})
     wifi_info: dict[str, Any] = {"platform": "wifi_info"}
-    for key, conf, label, icon in (("ip", "ip_address", "IP-Adresse", "mdi:ip-network"),
-                                   ("ssid", "ssid", "Verbunden mit (SSID)", "mdi:access-point-network"),
-                                   ("bssid", "bssid", "Verbunden mit (BSSID)", "mdi:access-point"),
-                                   ("mac", "mac_address", "MAC-Adresse", "mdi:ip")):
+    for key, conf, label, icon in (("ip", "ip_address", T("IP-Adresse"), "mdi:ip-network"),
+                                   ("ssid", "ssid", T("Verbunden mit (SSID)"), "mdi:access-point-network"),
+                                   ("bssid", "bssid", T("Verbunden mit (BSSID)"), "mdi:access-point"),
+                                   ("mac", "mac_address", T("MAC-Adresse"), "mdi:ip")):
         if diag.get(key):
             wifi_info[conf] = {"name": label, "icon": icon, "entity_category": "diagnostic"}
     if len(wifi_info) > 1:
@@ -1392,7 +1406,7 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
     if diag.get("status"):
         ctx.add("binary_sensor", {"platform": "status", "name": "Status", "entity_category": "diagnostic"})
     if diag.get("restart"):
-        ctx.add("button", {"platform": "restart", "name": "Neustart", "entity_category": "config"})
+        ctx.add("button", {"platform": "restart", "name": T("Neustart"), "entity_category": "config"})
     if diag.get("debug_heap") or diag.get("debug_loop") or diag.get("debug_reset"):
         interval = str(p.get("debug_interval") or "30s").strip()
         if not INTERVAL_RE.match(interval):
@@ -1401,15 +1415,15 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
         out_debug: dict[str, Any] = {"update_interval": interval}
         dbg: dict[str, Any] = {"platform": "debug"}
         if diag.get("debug_heap"):
-            dbg["free"] = {"name": "Freier Heap", "entity_category": "diagnostic"}
-            dbg["block"] = {"name": "Größter Heap-Block", "entity_category": "diagnostic"}
+            dbg["free"] = {"name": T("Freier Heap"), "entity_category": "diagnostic"}
+            dbg["block"] = {"name": T("Größter Heap-Block"), "entity_category": "diagnostic"}
         if diag.get("debug_loop"):
-            dbg["loop_time"] = {"name": "Loop-Zeit", "entity_category": "diagnostic"}
+            dbg["loop_time"] = {"name": T("Loop-Zeit"), "entity_category": "diagnostic"}
         if len(dbg) > 1:
             ctx.add("sensor", dbg)
         if diag.get("debug_reset"):
             ctx.add("text_sensor", {"platform": "debug",
-                                    "reset_reason": {"name": "Reset-Grund", "entity_category": "diagnostic"}})
+                                    "reset_reason": {"name": T("Reset-Grund"), "entity_category": "diagnostic"}})
         out["debug"] = out_debug
         ctx.warn("Die Debug-Sensoren sind zur Fehlersuche gedacht (Neustarts, Speicher). Danach wieder abschalten.")
 
@@ -1443,18 +1457,18 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
         out = {"substitutions": out.pop("substitutions"), **out}
 
     header = [
-        f"# ESPHome Studio · Gerät „{name}“",
+        T("# ESPHome Studio · Gerät „{0}“", name),
         f"# Board: {board['label']}",
-        "# Zugangsdaten und Schlüssel stehen in der secrets.yaml (siehe zweiter Reiter)."
-        if ctx.use_secrets else "# Achtung: Zugangsdaten stehen direkt in dieser Datei.",
+        T("# Zugangsdaten und Schlüssel stehen in der secrets.yaml (siehe zweiter Reiter).")
+        if ctx.use_secrets else T("# Achtung: Zugangsdaten stehen direkt in dieser Datei."),
         "",
     ]
     yaml_text = "\n".join(header) + "\n" + dump_yaml(out)
 
     secrets_lines: list[str] = []
     if ctx.use_secrets and ctx.secret_values:
-        secrets_lines.append("# In die secrets.yaml von ESPHome einfügen.")
-        secrets_lines.append("# wifi_ssid und wifi_password gelten für alle Geräte und müssen nur einmal vorkommen.")
+        secrets_lines.append(T("# In die secrets.yaml von ESPHome einfügen."))
+        secrets_lines.append(T("# wifi_ssid und wifi_password gelten für alle Geräte und müssen nur einmal vorkommen."))
         for k, v in ctx.secret_values.items():
             secrets_lines.append(f"{k}: {json.dumps(v, ensure_ascii=False)}")
     secrets_text = "\n".join(secrets_lines) + ("\n" if secrets_lines else "")
@@ -1463,9 +1477,14 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
             "ok": not ctx.errors}
 
 
-def generate(project: dict[str, Any], stored_secrets: dict[str, Any] | None = None) -> dict[str, Any]:
+def generate(project: dict[str, Any], stored_secrets: dict[str, Any] | None = None, lang: str = "de") -> dict[str, Any]:
     """Erzeugt YAML + secrets.yaml-Block. Wirft keine Ausnahmen."""
-    try:
-        return _generate(json.loads(json.dumps(project)), stored_secrets or {})
-    except Exception as exc:  # noqa: BLE001
-        return {"yaml": "", "secrets": "", "warnings": [], "errors": [f"Interner Fehler: {exc}"], "ok": False}
+    with use_lang(lang):
+        try:
+            res = _generate(json.loads(json.dumps(project)), stored_secrets or {})
+        except Exception as exc:  # noqa: BLE001
+            return {"yaml": "", "secrets": "", "warnings": [], "errors": [T("Interner Fehler: {0}", exc)], "ok": False}
+        if lang == "en":
+            res["errors"] = [tr(m) for m in res.get("errors", [])]
+            res["warnings"] = [tr(m) for m in res.get("warnings", [])]
+        return res

@@ -32,6 +32,7 @@ from .const import (
 )
 from .generator import default_project, generate, new_ap_password, new_api_key, new_password
 from .deploy import DEFAULT_DIR, DeployError, version_tuple, write_to_dashboard, write_to_folder
+from .i18n import LANGS, tr, tr_struct, ui_dictionary, use_lang
 from .importer import import_yaml
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not hass.data.get(WS_REGISTERED):
         for handler in (ws_meta, ws_board, ws_catalog, ws_import, ws_list, ws_get, ws_save, ws_delete, ws_new, ws_generate, ws_set_secrets,
-                        ws_random, ws_deploy_settings, ws_deploy):
+                        ws_random, ws_deploy_settings, ws_deploy, ws_i18n):
             websocket_api.async_register_command(hass, handler)
         hass.data[WS_REGISTERED] = True
 
@@ -89,10 +90,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # ------------------------------------------------------------------- Helfer --
 
 
-def _state(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg_id: int):
+def _lang(msg: dict[str, Any]) -> str:
+    lg = str(msg.get("lang") or "de")
+    return lg if lg in LANGS else "de"
+
+
+def _state(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg_id: int, lang: str = "de"):
     st = hass.data.get(DOMAIN)
     if not st:
-        connection.send_error(msg_id, "not_loaded", "ESPHome Studio ist nicht geladen.")
+        connection.send_error(msg_id, "not_loaded", tr("ESPHome Studio ist nicht geladen.", lang))
         return None
     return st
 
@@ -129,43 +135,58 @@ def _clean_project(project: dict[str, Any]) -> dict[str, Any] | None:
 # --------------------------------------------------------- Websocket-Befehle --
 
 
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/meta"})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/meta", vol.Optional("lang"): str})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_meta(hass, connection, msg):
-    connection.send_result(msg["id"], {
+    lg = _lang(msg)
+    connection.send_result(msg["id"], tr_struct({
         "version": VERSION,
         "boards": boards_meta(),
         "types": components_meta(),
         "group_order": GROUP_ORDER,
         "entity": entity_meta(),
-    })
+    }, lg))
 
 
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/catalog"})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/i18n", vol.Optional("lang"): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_i18n(hass, connection, msg):
+    """Wörterbuch für die Oberfläche (deutscher Text -> Zielsprache)."""
+    connection.send_result(msg["id"], {"dict": ui_dictionary(_lang(msg))})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/catalog", vol.Optional("lang"): str})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_catalog(hass, connection, msg):
     cat = await hass.async_add_executor_job(catalog)
+    lg = _lang(msg)
+    if lg == "en":
+        cache = hass.data[DOMAIN].setdefault("catalog_en", {})
+        if "v" not in cache:
+            cache["v"] = await hass.async_add_executor_job(lambda: tr_struct(cat, "en"))
+        cat = cache["v"]
     connection.send_result(msg["id"], cat)
 
 
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/board", vol.Required("key"): str})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/board", vol.Optional("lang"): str, vol.Required("key"): str})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_board(hass, connection, msg):
     detail = board_detail(msg["key"])
     if detail is None:
-        connection.send_error(msg["id"], "invalid_board", "Unbekanntes Board.")
+        connection.send_error(msg["id"], "invalid_board", tr("Unbekanntes Board.", _lang(msg)))
         return
-    connection.send_result(msg["id"], {"board": detail})
+    connection.send_result(msg["id"], {"board": tr_struct(detail, _lang(msg))})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/list"})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/list", vol.Optional("lang"): str})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_list(hass, connection, msg):
-    st = _state(hass, connection, msg["id"])
+    st = _state(hass, connection, msg["id"], _lang(msg))
     if not st:
         return
     projects = [_summary(pid, p) for pid, p in st["data"]["projects"].items()]
@@ -174,39 +195,39 @@ async def ws_list(hass, connection, msg):
 
 
 # Hinweis: "id" ist bei Home Assistant die Nachrichten-ID, die Projekt-ID heißt deshalb "project_id".
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/get", vol.Required("project_id"): str})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/get", vol.Optional("lang"): str, vol.Required("project_id"): str})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_get(hass, connection, msg):
-    st = _state(hass, connection, msg["id"])
+    st = _state(hass, connection, msg["id"], _lang(msg))
     if not st:
         return
     project = st["data"]["projects"].get(msg["project_id"])
     if project is None:
-        connection.send_error(msg["id"], "not_found", "Projekt nicht gefunden.")
+        connection.send_error(msg["id"], "not_found", tr("Projekt nicht gefunden.", _lang(msg)))
         return
     connection.send_result(msg["id"], {"project": {**project, "id": msg["project_id"]}})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/save", vol.Required("project"): dict})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/save", vol.Optional("lang"): str, vol.Required("project"): dict})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_save(hass, connection, msg):
-    st = _state(hass, connection, msg["id"])
+    st = _state(hass, connection, msg["id"], _lang(msg))
     if not st:
         return
     project = _clean_project(msg["project"])
     if project is None:
-        connection.send_error(msg["id"], "invalid_project", "Das Projekt ist ungültig oder zu groß.")
+        connection.send_error(msg["id"], "invalid_project", tr("Das Projekt ist ungültig oder zu groß.", _lang(msg)))
         return
     if project.get("board") not in BOARDS:
-        connection.send_error(msg["id"], "invalid_board", "Unbekanntes Board.")
+        connection.send_error(msg["id"], "invalid_board", tr("Unbekanntes Board.", _lang(msg)))
         return
     projects = st["data"]["projects"]
     pid = str(project.pop("id", "") or "")
     if not pid or pid not in projects:
         if len(projects) >= MAX_PROJECTS:
-            connection.send_error(msg["id"], "too_many", "Zu viele Projekte gespeichert.")
+            connection.send_error(msg["id"], "too_many", tr("Zu viele Projekte gespeichert.", _lang(msg)))
             return
         pid = new_password()[:12]
     project["updated"] = dt_util.utcnow().isoformat()
@@ -215,11 +236,11 @@ async def ws_save(hass, connection, msg):
     connection.send_result(msg["id"], {"project": {**project, "id": pid}})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/delete", vol.Required("project_id"): str})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/delete", vol.Optional("lang"): str, vol.Required("project_id"): str})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_delete(hass, connection, msg):
-    st = _state(hass, connection, msg["id"])
+    st = _state(hass, connection, msg["id"], _lang(msg))
     if not st:
         return
     if st["data"]["projects"].pop(msg["project_id"], None) is not None:
@@ -227,15 +248,17 @@ async def ws_delete(hass, connection, msg):
     connection.send_result(msg["id"], {})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/new", vol.Optional("board"): str})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/new", vol.Optional("lang"): str, vol.Optional("board"): str})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_new(hass, connection, msg):
-    connection.send_result(msg["id"], {"project": default_project(msg.get("board") or "d1_mini")})
+    with use_lang(_lang(msg)):
+        connection.send_result(msg["id"], {"project": default_project(msg.get("board") or "d1_mini")})
 
 
 @websocket_api.websocket_command({
     vol.Required("type"): "esphome_studio/import",
+    vol.Optional("lang"): str,
     vol.Required("yaml"): str,
     vol.Optional("secrets"): str,
 })
@@ -243,25 +266,25 @@ async def ws_new(hass, connection, msg):
 @websocket_api.async_response
 async def ws_import(hass, connection, msg):
     if len(msg["yaml"]) > MAX_PROJECT_BYTES or len(msg.get("secrets", "")) > MAX_PROJECT_BYTES:
-        connection.send_error(msg["id"], "too_large", "Die YAML ist zu groß.")
+        connection.send_error(msg["id"], "too_large", tr("Die YAML ist zu groß.", _lang(msg)))
         return
-    connection.send_result(msg["id"], await hass.async_add_executor_job(import_yaml, msg["yaml"], msg.get("secrets", "")))
+    connection.send_result(msg["id"], await hass.async_add_executor_job(import_yaml, msg["yaml"], msg.get("secrets", ""), _lang(msg)))
 
 
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/generate", vol.Required("project"): dict})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/generate", vol.Optional("lang"): str, vol.Required("project"): dict})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_generate(hass, connection, msg):
     st = hass.data.get(DOMAIN)
     secrets = st["data"]["secrets"] if st else {}
-    connection.send_result(msg["id"], generate(msg["project"], secrets))
+    connection.send_result(msg["id"], generate(msg["project"], secrets, _lang(msg)))
 
 
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/set_secrets", vol.Required("secrets"): dict})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/set_secrets", vol.Optional("lang"): str, vol.Required("secrets"): dict})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_set_secrets(hass, connection, msg):
-    st = _state(hass, connection, msg["id"])
+    st = _state(hass, connection, msg["id"], _lang(msg))
     if not st:
         return
     for key in SECRET_KEYS:
@@ -273,6 +296,7 @@ async def ws_set_secrets(hass, connection, msg):
 
 @websocket_api.websocket_command({
     vol.Required("type"): "esphome_studio/random",
+    vol.Optional("lang"): str,
     vol.Required("kind"): vol.In(["api", "ota", "ap"]),
 })
 @websocket_api.require_admin
@@ -290,6 +314,7 @@ def _settings(st: dict[str, Any]) -> dict[str, str]:
 
 @websocket_api.websocket_command({
     vol.Required("type"): "esphome_studio/deploy_settings",
+    vol.Optional("lang"): str,
     vol.Optional("target_dir"): str,
     vol.Optional("dashboard_url"): str,
     vol.Optional("dashboard_user"): str,
@@ -298,7 +323,7 @@ def _settings(st: dict[str, Any]) -> dict[str, str]:
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_deploy_settings(hass, connection, msg):
-    st = _state(hass, connection, msg["id"])
+    st = _state(hass, connection, msg["id"], _lang(msg))
     if not st:
         return
     changed = False
@@ -319,17 +344,18 @@ async def ws_deploy_settings(hass, connection, msg):
     connection.send_result(msg["id"], cur)
 
 
-@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/deploy", vol.Required("project"): dict})
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/deploy", vol.Optional("lang"): str, vol.Required("project"): dict})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_deploy(hass, connection, msg):
     """Fertige YAML in den ESPHome-Ordner (oder per Dashboard) schreiben; secrets.yaml nur ergänzen."""
-    st = _state(hass, connection, msg["id"])
+    st = _state(hass, connection, msg["id"], _lang(msg))
     if not st:
         return
-    res = generate(msg["project"], st["data"]["secrets"])
+    lg = _lang(msg)
+    res = generate(msg["project"], st["data"]["secrets"], lg)
     if not res.get("ok"):
-        connection.send_error(msg["id"], "invalid", "Die Konfiguration hat noch Fehler. Erst beheben, dann speichern.")
+        connection.send_error(msg["id"], "invalid", tr("Die Konfiguration hat noch Fehler. Erst beheben, dann speichern.", _lang(msg)))
         return
     name = str(msg["project"].get("name") or "")
     cfg = _settings(st)
@@ -346,17 +372,17 @@ async def ws_deploy(hass, connection, msg):
             if not hass.config.is_allowed_path(folder):
                 raise DeployError(f"Der Ordner „{folder}“ ist für Home Assistant nicht freigegeben "
                                   "(allowlist_external_dirs). Ordner unterhalb von /config verwenden.")
-            out = await hass.async_add_executor_job(write_to_folder, folder, name, res["yaml"], res.get("secrets", ""))
+            out = await hass.async_add_executor_job(write_to_folder, folder, name, res["yaml"], res.get("secrets", ""), lg)
     except DeployError as exc:
-        connection.send_error(msg["id"], "deploy_failed", str(exc))
+        connection.send_error(msg["id"], "deploy_failed", tr(str(exc), lg))
         return
     except OSError as exc:
-        connection.send_error(msg["id"], "deploy_failed", f"Schreiben fehlgeschlagen: {exc.strerror or exc}")
+        connection.send_error(msg["id"], "deploy_failed", tr(f"Schreiben fehlgeschlagen: {exc.strerror or exc}", lg))
         return
     ota_mode = (msg["project"].get("ota") or {}).get("mode", "encryption")
     if (ota_mode == "encryption" and msg["project"].get("ota", {}).get("enabled", True)
             and out.get("esphome_version") and version_tuple(out["esphome_version"]) < (2026, 9)):
-        out["warning"] = (f"Dein ESPHome ist Version {out['esphome_version']}. Die OTA-Verschlüsselung („ota: encryption“) gibt es erst "
-                          "ab 2026.9. Stelle unter „WLAN, Secrets & Sicherheit“ die OTA-Absicherung auf „Passwort“, "
-                          "sonst meldet ESPHome einen Fehler.")
+        out["warning"] = tr(f"Dein ESPHome ist Version {out['esphome_version']}. Die OTA-Verschlüsselung („ota: encryption“) gibt es erst "
+                            "ab 2026.9. Stelle unter „WLAN, Secrets & Sicherheit“ die OTA-Absicherung auf „Passwort“, "
+                            "sonst meldet ESPHome einen Fehler.", lg)
     connection.send_result(msg["id"], out)

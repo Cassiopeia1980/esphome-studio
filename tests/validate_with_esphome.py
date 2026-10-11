@@ -1,6 +1,6 @@
 """Erzeugt Beispielprojekte für jedes Board und prüft sie mit `esphome config`.
 
-Aufruf:  python tests/validate_with_esphome.py [pfad/zu/esphome]
+Aufruf:  python tests/validate_with_esphome.py [pfad/zu/esphome] [--lang=en]
 """
 
 from __future__ import annotations
@@ -239,12 +239,14 @@ SAMPLES["s2"] = project("esp32-s2-saola-1", "s2", [
 
 
 def main() -> int:
-    esphome_bin = sys.argv[1] if len(sys.argv) > 1 else "esphome"
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    lang = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--lang=")), "de")
+    esphome_bin = args[0] if args else "esphome"
     failed = 0
     with tempfile.TemporaryDirectory() as tmp:
         tmpdir = Path(tmp)
         for key, proj in SAMPLES.items():
-            res = gen.generate(proj, STORED)
+            res = gen.generate(proj, STORED, lang=lang)
             print(f"== {key}: ok={res['ok']} warnungen={len(res['warnings'])} fehler={len(res['errors'])}")
             for e in res["errors"]:
                 print("   FEHLER:", e)
