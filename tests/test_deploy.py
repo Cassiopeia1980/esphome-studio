@@ -91,7 +91,7 @@ async def test_dashboard_protocol_with_fake_device_builder(aiohttp_server, socke
     assert r["secrets_added"] == ["wifi_password", "kueche_api_key"] and r["secrets_conflicts"] == ["wifi_ssid"]
     assert r["esphome_version"] == "2026.8.2"
     cmds = [c for c, _ in seen]
-    assert cmds[:2] == ["config/get_secrets", "devices/create"] and cmds.count("config/set_secret") == 2
+    assert cmds[:3] == ["config/get_secrets", "devices/get_config", "devices/create"] and cmds.count("config/set_secret") == 2
     assert dict(seen)["devices/create"]["overwrite"] is True
     async with aiohttp.ClientSession() as s:
         with pytest.raises(dp.DeployError):
@@ -200,3 +200,41 @@ async def test_secret_store_used_by_import(setup, hass):  # noqa: F811
     assert r["result"]["count"] == 0
     r = await call(ws, "import", yaml=yaml_text)
     assert r["result"]["project"]["api"]["key"] == ""
+
+
+async def test_dashboard_write_returns_previous_version(aiohttp_server, socket_enabled):
+    import aiohttp  # noqa: PLC0415
+    from aiohttp import web  # noqa: PLC0415
+
+    files = {"kueche.yaml": "alt: 1\n"}
+
+    async def ws_handler(request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+        await ws.send_json({"esphome_version": "2026.9.0", "requires_auth": False})
+        async for m in ws:
+            msg = m.json()
+            a = msg["args"]
+            if msg["command"] == "devices/get_config":
+                if a["configuration"] not in files:
+                    await ws.send_json({"message_id": msg["message_id"], "error": "not found", "details": "nicht gefunden"})
+                    continue
+                res = files[a["configuration"]]
+            elif msg["command"] == "config/get_secrets":
+                res = []
+            else:
+                if msg["command"] == "devices/create":
+                    files[a["name"] + ".yaml"] = a["file_content"]
+                res = {}
+            await ws.send_json({"message_id": msg["message_id"], "result": res})
+        return ws
+
+    app = web.Application()
+    app.router.add_get("/ws", ws_handler)
+    server = await aiohttp_server(app)
+    url = f"http://127.0.0.1:{server.port}"
+    async with aiohttp.ClientSession() as s:
+        r = await dp.write_to_dashboard(s, url, "kueche", "neu: 1\n", "")
+        assert r["previous"] == "alt: 1\n" and files["kueche.yaml"] == "neu: 1\n"
+        r = await dp.write_to_dashboard(s, url, "bad", "x: 1\n", "")  # neue Datei: keine Vorversion
+        assert "previous" not in r

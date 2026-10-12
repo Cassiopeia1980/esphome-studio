@@ -940,8 +940,10 @@ class ESPHomeStudioPanel extends HTMLElement {
         notes.push("Die WLAN-Zugangsdaten in der YAML weichen von den gespeicherten ab. Das Studio benutzt die gespeicherten (Bereich „WLAN“).");
       }
     }
-    if (res.project.use_secrets) {
+    if (res.project.use_secrets && res.project.api?.encryption) {
       notes.push("Das Studio nennt die Schlüssel im secrets.yaml-Block nach dem Gerät (z. B. gerät_api_key). Die Zeilen aus dem Reiter „secrets.yaml“ bitte in deine secrets.yaml übernehmen.");
+    } else if (res.project.use_secrets) {
+      notes.push("Die Zugangsdaten stehen als Einträge im Reiter „secrets.yaml“. Fehlende Zeilen bitte in deine secrets.yaml übernehmen.");
     }
     const empty = this._srcLoaded ? this._secretStatus().filter((x) => !x.known).map((x) => x.key) : [];
     if (empty.length) notes.push(`${tx("Diese Secrets sind leer geblieben und müssen ergänzt werden:")} ${empty.join(", ")}`);
@@ -1530,6 +1532,8 @@ class ESPHomeStudioPanel extends HTMLElement {
         isYaml ? h("button", { class: "primary", disabled: !o.ok, onClick: () => this._deploy() }, "In ESPHome speichern") : null,
         h("span", { class: "spacer" }), h("span", { class: "pinnote" }, filename)),
       this._deployMsg ? h("div", { class: `msg ${this._deployMsg.err ? "err" : "ok"}`, style: "margin-top:8px" }, this._deployMsg.text) : null,
+      this._prevBackup ? h("div", { class: "row", style: "margin-top:8px" },
+        h("button", { onClick: () => this._download(this._prevBackup.name, this._prevBackup.text) }, "Vorherige Version herunterladen")) : null,
       isYaml ? this._deployBox() : null,
       h("p", { class: "hint" }, isYaml
         ? "In ESPHome ein neues Gerät anlegen (oder ein vorhandenes bearbeiten), den Inhalt ersetzen und installieren. Erstes Flashen per USB, danach per WLAN."
@@ -1553,7 +1557,7 @@ class ESPHomeStudioPanel extends HTMLElement {
           this._deployMsg = { text: "Ziel gespeichert." + (!this._deploySet.dashboard_url && !this._deploySet.dir_exists ? " Achtung: Der Ordner existiert nicht." : "") };
         } catch (e) { this._deployMsg = { err: true, text: e.message || "Speichern fehlgeschlagen." }; }
         this._renderOutput(); } }, "Ziel speichern")),
-      h("p", { class: "hint" }, "Vorhandene Dateien werden als .bak gesichert. In die secrets.yaml werden nur fehlende Einträge ergänzt, nichts wird überschrieben. Hinweis: Das ESPHome-Add-on liegt bei Home Assistant OS meist nicht im Ordner /config/esphome. Dann die Adresse des Device Builders eintragen (im Add-on den Port 6052 freigeben). Vorhandene Secrets bleiben unangetastet. Das Passwort wird im Speicher von Home Assistant abgelegt (.storage, auch in Backups) und nie wieder im Panel angezeigt."));
+      h("p", { class: "hint" }, "Im Ordner-Modus werden vorhandene Dateien als .bak gesichert, beim Device Builder kannst du die vorherige Version nach dem Speichern herunterladen. In die secrets.yaml werden nur fehlende Einträge ergänzt, nichts wird überschrieben. Hinweis: Das ESPHome-Add-on liegt bei Home Assistant OS meist nicht im Ordner /config/esphome. Dann die Adresse des Device Builders eintragen (im Add-on den Port 6052 freigeben). Vorhandene Secrets bleiben unangetastet. Das Passwort wird im Speicher von Home Assistant abgelegt (.storage, auch in Backups) und nie wieder im Panel angezeigt."));
     return d;
   }
 
@@ -1570,6 +1574,8 @@ class ESPHomeStudioPanel extends HTMLElement {
     try {
       const r = await this._ws("deploy", { project: this.p });
       const parts = [`${tx("Gespeichert:")} ${r.where}${r.backup ? tx(" (alte Datei als .bak gesichert)") : ""}.`];
+      this._prevBackup = r.previous ? { name: `${this.p.name}.vorher.yaml`, text: r.previous } : null;
+      if (r.previous) parts.push(tx("Die vorherige Version der Datei wurde überschrieben. Du kannst sie unten herunterladen."));
       if (r.secrets_added?.length) parts.push(`secrets.yaml ergänzt: ${r.secrets_added.join(", ")}.`);
       if (r.secrets_conflicts?.length) parts.push(`Nicht überschrieben (anderer Wert in der secrets.yaml): ${r.secrets_conflicts.join(", ")}. Gerät dann ggf. von Hand angleichen.`);
       this._deployMsg = { text: parts.join(" ") };

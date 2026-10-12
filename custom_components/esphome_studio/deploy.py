@@ -159,6 +159,12 @@ async def write_to_dashboard(session: Any, base_url: str, name: str, yaml_text: 
         existing = await cmd("config/get_secrets")
         result: dict[str, Any] = {"where": f"{base} → {name}.yaml", "backup": False,
                                   "secrets_added": [], "secrets_conflicts": []}
+        try:  # vorhandene Datei vor dem Überschreiben sichern (Device Builder legt keine .bak an)
+            old = await cmd("devices/get_config", configuration=f"{name}.yaml")
+            if isinstance(old, str) and old.strip() and len(old) <= MAX_YAML:
+                result["previous"] = old
+        except DeployError:
+            pass  # Datei gibt es noch nicht
         await cmd("devices/create", name=name, file_content=yaml_text, overwrite=True)
         for k, v in parse_secret_block(secrets_block).items():
             if k in (existing or []):

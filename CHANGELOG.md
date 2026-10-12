@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.1
+- „In ESPHome speichern“ über den Device Builder sichert die vorherige Version: nach dem Speichern gibt es den Knopf „Vorherige Version herunterladen“ (der Device Builder legt selbst keine .bak an)
+- Hinweis zu den Schlüsseln im Import-Bericht erscheint nur noch, wenn wirklich eine API-Verschlüsselung vorhanden ist
+
 ## 0.11.0
 - Neu: optionaler **Secrets-Speicher** (auf eigene Gefahr): die ganze secrets.yaml einmal ablegen, beim Import werden benutzte `!secret`-Werte automatisch ergänzt (gemeinsame API-Schlüssel und Passwörter bleiben dadurch erhalten); eingefügte Zeilen haben Vorrang
 - Werte werden nie an das Panel zurückgegeben, nur die Namen; neuer Websocket-Befehl `secret_store`
