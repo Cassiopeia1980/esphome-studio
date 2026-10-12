@@ -42,7 +42,7 @@ _LOGGER = logging.getLogger(__name__)
 STATIC_REGISTERED = f"{DOMAIN}_static_registered"
 WS_REGISTERED = f"{DOMAIN}_ws_registered"
 MAX_PROJECT_BYTES = 300_000
-SECRET_KEYS = ("wifi_ssid", "wifi_password")
+SECRET_KEYS = ("wifi_ssid", "wifi_password", "ap_password")
 
 
 # --------------------------------------------------------------- Einrichtung --

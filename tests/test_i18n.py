@@ -61,7 +61,7 @@ def test_board_data_texts_are_translated():
 def test_samples_in_english_have_no_german_leftovers():
     bad = []
     for key, proj in v.SAMPLES.items():
-        r = gen.generate(proj, {"wifi_ssid": "x", "wifi_password": "y"}, "en")
+        r = gen.generate(proj, {"wifi_ssid": "x", "wifi_password": "y", "ap_password": "hotspot-pw-123"}, "en")
         for where in ("errors", "warnings"):
             bad += [(key, where, m) for m in r[where] if _left(m)]
         bad += [(key, "yaml", ln) for ln in r["yaml"].splitlines() if ln.lstrip().startswith("#") and _left(ln)]
@@ -104,7 +104,7 @@ def test_english_names_roundtrip_through_importer():
     p["name"] = "t"
     p["diag"] = {"wifi_signal": True, "uptime": True, "restart": True, "uptime_text": True, "ip": True, "status": True}
     for lang in ("de", "en"):
-        r = gen.generate(p, {"wifi_ssid": "x", "wifi_password": "y"}, lang)
+        r = gen.generate(p, {"wifi_ssid": "x", "wifi_password": "y", "ap_password": "hotspot-pw-123"}, lang)
         res = imp.import_yaml(r["yaml"], r["secrets"], lang)
         assert res["ok"] and res["project"]["diag"]["wifi_signal"] and res["project"]["diag"]["uptime_text"], (lang, res)
         assert not res["unmapped"], (lang, res["unmapped"])

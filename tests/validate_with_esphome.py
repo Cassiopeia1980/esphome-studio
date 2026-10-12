@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from helpers import load_core  # noqa: E402
 
 boards, components, gen = load_core()
-STORED = {"wifi_ssid": "Test WLAN", "wifi_password": "geheim-1234"}
+STORED = {"wifi_ssid": "Test WLAN", "wifi_password": "geheim-1234", "ap_password": "hotspot-pw-123"}
 
 
 def comp(type_key, name, pins=None, **options):

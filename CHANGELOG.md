@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.0
+- Neue Option „Ein Hotspot-Passwort für alle Geräte“ (Standard bei neuen Projekten): das Passwort des Fallback-Hotspots liegt wie das WLAN-Passwort einmal im Speicher von Home Assistant und steht im secrets.yaml-Block als `ap_password`. Bestehende Projekte behalten ihr Passwort pro Gerät
+- Der Import erkennt `!secret ap_password` als gemeinsames Hotspot-Passwort und übernimmt den Wert in den Speicher
+
 ## 0.13.0
 - Der Baustein „Taster / Reed-Kontakt / Türkontakt“ kann jetzt ein Licht/Relais dem Kontakt **folgen** lassen (aus/an bei geschlossenem Kontakt) und beim Start den Zustand angleichen (`on_boot`); der Import erkennt dieses Muster samt `delayed_on` + `delayed_off`
 - Import-Option „Namen der Diagnose-Entitäten und Lichteffekte auf den Studio-Standard vereinheitlichen“ (Standard: an), damit alle Geräte gleiche Namen bekommen; ohne Haken bleiben eigene Namen

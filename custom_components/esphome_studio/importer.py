@@ -882,7 +882,13 @@ class _Importer:
             ap = dict(ap)
             pwd = ap.pop("password", None)
             val = self.val(pwd) if pwd is not None else None
-            if isinstance(val, str) and len(val) >= 8:
+            p["wifi"]["ap_shared"] = False
+            if self.is_secret(pwd) and pwd.value == "ap_password":
+                # gemeinsames Passwort für alle Geräte: gehört in den Speicher, nicht ins Projekt
+                p["wifi"]["ap_shared"] = True
+                if isinstance(val, str) and val:
+                    self.secrets_found["ap_password"] = val
+            elif isinstance(val, str) and len(val) >= 8:
                 p["wifi"]["ap_password"] = val
             elif pwd is not None:
                 self.note("Das Passwort des Fallback-Hotspots konnte nicht gelesen werden; es wurde ein neues erzeugt.")

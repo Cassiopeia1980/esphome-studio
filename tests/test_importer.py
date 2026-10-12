@@ -12,7 +12,7 @@ boards, components, gen = load_core()
 import importlib  # noqa: E402
 
 imp = importlib.import_module("esphome_studio.importer")
-STORED = {"wifi_ssid": "Mein WLAN", "wifi_password": "supergeheim"}
+STORED = {"wifi_ssid": "Mein WLAN", "wifi_password": "supergeheim", "ap_password": "hotspot-pw-123"}
 
 
 def roundtrip(project):
@@ -259,3 +259,28 @@ def test_normalize_unifies_diag_names():
     y = gen.generate(norm["project"], STORED)["yaml"]
     assert "name: Neustart" in y and "name: Reboot" not in y and "Strobe Effect" not in y
     assert any("vereinheitlicht" in n for n in norm["notes"])
+
+
+def test_shared_ap_password_roundtrip():
+    # `!secret ap_password` ist das gemeinsame Hotspot-Passwort: Wert wandert in den Speicher, nicht ins Projekt
+    yaml_text = (SAMPLES / "acepro1.yaml").read_text()
+    res = imp.import_yaml(yaml_text, ACE_SECRETS)
+    assert res["ok"]
+    assert res["project"]["wifi"]["ap_shared"] is True
+    assert res["secrets"]["ap_password"] == "apapapap1234"
+    out = gen.generate(res["project"], {**STORED, "ap_password": "apapapap1234"})
+    assert out["ok"], out["errors"]
+    assert "password: !secret ap_password" in out["yaml"]
+    assert 'ap_password: "apapapap1234"' in out["secrets"]
+    assert "acepro1_ap_password" not in out["yaml"]
+
+
+def test_ap_password_per_device_when_not_shared():
+    proj = gen.default_project()
+    proj["name"] = "kueche"
+    proj["wifi"]["ap_shared"] = False
+    out = gen.generate(proj, STORED)
+    assert "!secret kueche_ap_password" in out["yaml"]
+    proj["wifi"]["ap_shared"] = True
+    out = gen.generate(proj, {"wifi_ssid": "a", "wifi_password": "b"})
+    assert out["ok"] and any("Hotspot" in w for w in out["warnings"])

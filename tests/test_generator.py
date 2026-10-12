@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from helpers import load_core  # noqa: E402
 
 boards, components, gen = load_core()
-STORED = {"wifi_ssid": "Mein WLAN", "wifi_password": "pw"}
+STORED = {"wifi_ssid": "Mein WLAN", "wifi_password": "pw", "ap_password": "hotspot-pw-123"}
 
 
 def proj(board="d1_mini", comps=None, **kw):

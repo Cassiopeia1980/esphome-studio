@@ -419,7 +419,7 @@ class ESPHomeStudioPanel extends HTMLElement {
     clearTimeout(this._secTimer);
     this._secTimer = setTimeout(async () => {
       try {
-        const res = await this._ws("set_secrets", { secrets: { wifi_ssid: this.secrets.wifi_ssid || "", wifi_password: this.secrets.wifi_password || "" } });
+        const res = await this._ws("set_secrets", { secrets: { wifi_ssid: this.secrets.wifi_ssid || "", wifi_password: this.secrets.wifi_password || "", ap_password: this.secrets.ap_password || "" } });
         this.secrets = res.secrets || this.secrets;
       } catch (err) {
         this._toast(`Zugangsdaten konnten nicht gespeichert werden: ${err?.message || tx("Fehler")}`);
@@ -946,6 +946,17 @@ class ESPHomeStudioPanel extends HTMLElement {
         notes.push("Die WLAN-Zugangsdaten in der YAML weichen von den gespeicherten ab. Das Studio benutzt die gespeicherten (Bereich „WLAN“).");
       }
     }
+    if (found.ap_password) {
+      if (!have.ap_password) {
+        try {
+          const r = await this._ws("set_secrets", { secrets: { ap_password: found.ap_password } });
+          this.secrets = r.secrets || this.secrets;
+          notes.push("Das gemeinsame Hotspot-Passwort aus der YAML wurde als Zugangsdatum gespeichert.");
+        } catch { /* wird unten gemeldet */ }
+      } else if (found.ap_password !== have.ap_password) {
+        notes.push("Das Hotspot-Passwort in der YAML weicht vom gespeicherten ab. Das Studio benutzt das gespeicherte (Bereich „WLAN“).");
+      }
+    }
     if (res.project.use_secrets && res.project.api?.encryption) {
       notes.push("Das Studio nennt die Schlüssel im secrets.yaml-Block nach dem Gerät (z. B. gerät_api_key). Die Zeilen aus dem Reiter „secrets.yaml“ bitte in deine secrets.yaml übernehmen.");
     } else if (res.project.use_secrets) {
@@ -1071,7 +1082,10 @@ class ESPHomeStudioPanel extends HTMLElement {
           [["", "Standard"], ["WPA", "WPA"], ["WPA2", "WPA2"], ["WPA3", "WPA3"]],
           "WPA2 verhindert, dass sich das Gerät mit unsicheren Netzen verbindet.")),
         this._check("wifi.fallback_ap", "Fallback-Hotspot + Captive Portal", "Falls das WLAN fehlt, öffnet das Gerät einen eigenen Hotspot zur Einrichtung.", true),
-        this.p.wifi.fallback_ap ? h("div", { class: "grid" }, this._field("Hotspot-Passwort",
+        this.p.wifi.fallback_ap ? this._check("wifi.ap_shared", "Ein Hotspot-Passwort für alle Geräte (empfohlen)",
+          "Das Passwort wird wie das WLAN-Passwort einmal gespeichert und im secrets.yaml-Block als „ap_password“ ausgegeben. Nimm mindestens 12 Zeichen, merkbar und nicht dein WLAN-Passwort. Ohne Haken bekommt jedes Gerät ein eigenes.", true) : null,
+        this.p.wifi.fallback_ap && this.p.wifi.ap_shared ? h("div", { class: "grid" }, secretText("ap_password", "Hotspot-Passwort (für alle Geräte)", true)) : null,
+        this.p.wifi.fallback_ap && !this.p.wifi.ap_shared ? h("div", { class: "grid" }, this._field("Hotspot-Passwort",
           h("div", { class: "row" }, h("input", { type: "text", value: this.p.wifi.ap_password, onInput: (e) => { this.p.wifi.ap_password = e.target.value; this._changed(false); } }), randomBtn("ap", "wifi.ap_password")))) : null,
         this._check("wifi.static_ip.enabled", "Feste IP-Adresse", "", true),
         st.enabled ? h("div", { class: "grid" },

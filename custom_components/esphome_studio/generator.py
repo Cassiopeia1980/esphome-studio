@@ -232,6 +232,7 @@ def default_project(board: str = "d1_mini") -> dict[str, Any]:
         "use_secrets": True,
         "wifi": {
             "fallback_ap": True,
+            "ap_shared": True,
             "ap_password": new_ap_password(),
             "min_auth_mode": "",
             "static_ip": {"enabled": False, "ip": "", "gateway": "", "subnet": "255.255.255.0", "dns": ""},
@@ -1318,10 +1319,22 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
     if wifi_p.get("min_auth_mode") in ("WPA", "WPA2", "WPA3"):
         wifi["min_auth_mode"] = wifi_p["min_auth_mode"]
     if wifi_p.get("fallback_ap", True):
-        ap_pw = str(wifi_p.get("ap_password") or "")
-        if len(ap_pw) < 8:
-            ctx.err("Fallback-Hotspot: Das Passwort braucht mindestens 8 Zeichen.")
-        wifi["ap"] = {"password": ctx.secret(f"{dev_slug}_ap_password", ap_pw)}
+        if wifi_p.get("ap_shared"):
+            # Ein Passwort für alle Geräte: liegt wie das WLAN-Passwort im Speicher von Home Assistant
+            ap_pw = str(ctx.stored.get("ap_password") or "")
+            if not ap_pw:
+                if ctx.use_secrets:
+                    ctx.warn("Das gemeinsame Hotspot-Passwort ist noch leer. Im secrets.yaml-Block steht ein Platzhalter.")
+                else:
+                    ctx.err("Das gemeinsame Hotspot-Passwort fehlt (Bereich „WLAN & Secrets“).")
+            elif len(ap_pw) < 8:
+                ctx.err("Fallback-Hotspot: Das Passwort braucht mindestens 8 Zeichen.")
+            wifi["ap"] = {"password": ctx.secret("ap_password", ap_pw or "HIER_HOTSPOT_PASSWORT_EINTRAGEN")}
+        else:
+            ap_pw = str(wifi_p.get("ap_password") or "")
+            if len(ap_pw) < 8:
+                ctx.err("Fallback-Hotspot: Das Passwort braucht mindestens 8 Zeichen.")
+            wifi["ap"] = {"password": ctx.secret(f"{dev_slug}_ap_password", ap_pw)}
 
     # --- Gesamtaufbau ---
     out: dict[str, Any] = {}

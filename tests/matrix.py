@@ -29,7 +29,7 @@ for key in REPS:
         c = gen.new_component(t, "Test", pins)
         p["components"] = [c]
         # I2C-Pins eindeutig wählen
-        r = gen.generate(p, {"wifi_ssid": "a", "wifi_password": "12345678"})
+        r = gen.generate(p, {"wifi_ssid": "a", "wifi_password": "12345678", "ap_password": "hotspot-pw-123"})
         f = tmp / f"{key}_{t}.yaml"
         (tmp / "secrets.yaml").write_text(r["secrets"] or "x: 1\n")
         f.write_text(r["yaml"])
