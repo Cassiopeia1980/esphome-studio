@@ -1,7 +1,7 @@
 """Konstanten für ESPHome Studio."""
 
 DOMAIN = "esphome_studio"
-VERSION = "0.10.0"
+VERSION = "0.10.1"
 STORAGE_KEY = "esphome_studio"
 STORAGE_VERSION = 1
 PANEL_URL_PATH = "esphome-studio"

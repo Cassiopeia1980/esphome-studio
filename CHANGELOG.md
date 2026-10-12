@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.1
+- „Aus ESPHome laden“ importiert nicht mehr sofort: erst „Laden“, dann Secret-Prüfung (bekannt/fehlt, fehlende Werte einfügen), dann „Importieren“; der Bericht nennt leer gebliebene Secrets
+
 ## 0.10.0
 - Neu: **„Aus ESPHome laden“** – bestehende Geräte-YAMLs direkt aus dem ESPHome Device Builder (oder dem ESPHome-Ordner) wählen und ins Studio importieren, um sie auf den aktuellen Stand zu bringen; kein Kopieren mehr nötig
 - Neue Websocket-Befehle `source_list` und `source_get`; im Ordner-Modus werden nur die von der YAML benutzten Secrets übernommen

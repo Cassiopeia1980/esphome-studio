@@ -368,9 +368,15 @@
  "Fehler": "error",
  "Aus ESPHome laden": "Load from ESPHome",
  "Bestehende Geräte-YAML aus dem ESPHome Device Builder oder Ordner laden und auf den aktuellen Stand bringen": "Load an existing device YAML from the ESPHome Device Builder or folder and bring it up to date",
- "Laden und importieren": "Load and import",
  "Quelle: ESPHome Device Builder. Die Werte der Secrets verrät der Device Builder nicht; WLAN und Schlüssel müssen ggf. ergänzt werden.": "Source: ESPHome Device Builder. The Device Builder does not reveal secret values; Wi-Fi and keys may need to be added.",
  "Quelle: ESPHome-Ordner. Benutzte Secrets werden aus der secrets.yaml mit übernommen.": "Source: ESPHome folder. Secrets that are used are taken from secrets.yaml.",
  "Keine Geräte-YAMLs gefunden.": "No device YAMLs found.",
- "Liste aktualisieren": "Refresh list"
+ "Liste aktualisieren": "Refresh list",
+ "„{0}“ ist geladen. Prüfe die Secrets, dann importieren.": "“{0}” is loaded. Check the secrets, then import.",
+ "bekannt": "known",
+ "fehlt": "missing",
+ "Fehlende Werte als Zeilen „schlüssel: wert“ aus deiner secrets.yaml einfügen. Es werden nur die benutzten Schlüssel übernommen.": "Paste the missing values as “key: value” lines from your secrets.yaml. Only the keys that are used are taken.",
+ "Die YAML benutzt keine Secrets.": "The YAML uses no secrets.",
+ "Laden": "Load",
+ "Diese Secrets sind leer geblieben und müssen ergänzt werden:": "These secrets stayed empty and need to be added:"
 }

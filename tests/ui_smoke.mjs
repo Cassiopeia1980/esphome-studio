@@ -210,7 +210,11 @@ check("Debug-Intervall-Feld erscheint", !!([...card("WLAN").querySelectorAll("in
   await sleep(300);
   const imp = card("Bestehende YAML");
   check("Quellen-Liste erscheint", !!imp && !!imp.querySelector("select") && imp.textContent.includes("kueche.yaml"), imp?.textContent.slice(0, 200));
-  button(imp, "Laden und importieren").click();
+  button(imp, "Laden").click();
+  await sleep(600);
+  const rev = card("Bestehende YAML");
+  check("Secret-Prüfung zeigt bekannt/fehlt", /wifi_ssid: bekannt/.test(rev.textContent), rev.textContent.slice(0, 300));
+  button(rev, "Importieren").click();
   await sleep(2500);
   check("Import aus ESPHome: Gerätename", card("Gerät").querySelector("input[type=text]").value === "kueche");
   check("Import aus ESPHome: kein Fehler", ![...root.querySelectorAll(".msg.err")].length);

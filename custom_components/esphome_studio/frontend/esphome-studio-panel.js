@@ -803,13 +803,14 @@ class ESPHomeStudioPanel extends HTMLElement {
         ...L.items.map((d) => h("option", { value: d.configuration, selected: d.configuration === (this._srcPick || L.items[0].configuration) },
           d.friendly_name ? `${d.friendly_name} · ${d.configuration}` : d.configuration)));
       body.push(h("div", { class: "row grow" }, sel,
-        h("button", { class: "primary", onClick: () => this._loadSource(this._srcPick || L.items[0].configuration) }, "Laden und importieren")),
+        h("button", { class: "primary", onClick: () => this._loadSource(this._srcPick || L.items[0].configuration) }, "Laden")),
         h("p", { class: "hint" }, L.source === "dashboard"
           ? "Quelle: ESPHome Device Builder. Die Werte der Secrets verrät der Device Builder nicht; WLAN und Schlüssel müssen ggf. ergänzt werden."
           : "Quelle: ESPHome-Ordner. Benutzte Secrets werden aus der secrets.yaml mit übernommen."));
     } else if (L) body.push(h("p", { class: "hint" }, "Keine Geräte-YAMLs gefunden."));
     if (this._srcError) body.push(h("div", { class: "msg err" }, this._srcError));
     body.push(h("button", { onClick: () => this._loadSourceList() }, "Liste aktualisieren"));
+    if (this._srcLoaded && (this._importText || "").trim()) body.push(this._secretReview());
     return h("div", { class: "field" }, h("label", {}, "Aus ESPHome laden"), ...body);
   }
 
@@ -831,13 +832,42 @@ class ESPHomeStudioPanel extends HTMLElement {
       const r = await this._ws("source_get", { configuration });
       this._importText = r.yaml || "";
       this._importSecrets = r.secrets || "";
+      this._srcLoaded = configuration;
     } catch (err) {
       this._srcError = err?.message || tx("Fehler");
       this._srcBusy = false; this._renderAll();
       return;
     }
-    this._srcBusy = false;
-    await this._doImport();
+    this._srcBusy = false; this._renderAll();
+  }
+
+  // Welche !secret-Schlüssel nutzt die YAML, und welche Werte sind schon bekannt?
+  _secretStatus() {
+    const keys = [...new Set([...(this._importText || "").matchAll(/!secret\s+([A-Za-z0-9_]+)/g)].map((m) => m[1]))];
+    const given = new Set([...(this._importSecrets || "").matchAll(/^\s*([A-Za-z0-9_]+)\s*:\s*\S/gm)].map((m) => m[1]));
+    const have = this.secrets || {};
+    return keys.map((k) => ({
+      key: k,
+      known: given.has(k) || (k === "wifi_ssid" && !!have.wifi_ssid) || (k === "wifi_password" && !!have.wifi_password),
+    }));
+  }
+
+  _secretReview() {
+    const st = this._secretStatus();
+    const parts = [h("p", { class: "hint" }, `„${this._srcLoaded}“ ist geladen. Prüfe die Secrets, dann importieren.`)];
+    if (st.length) {
+      parts.push(h("ul", {}, st.map((x) => h("li", {}, `${x.key}: ${x.known ? tx("bekannt") : tx("fehlt")}`))));
+      if (st.some((x) => !x.known)) {
+        parts.push(h("p", { class: "hint" }, "Fehlende Werte als Zeilen „schlüssel: wert“ aus deiner secrets.yaml einfügen. Es werden nur die benutzten Schlüssel übernommen."));
+      }
+    } else parts.push(h("p", { class: "hint" }, "Die YAML benutzt keine Secrets."));
+    if (this.simple) {
+      parts.push(h("textarea", { class: "mono", rows: "4", placeholder: "api_key: …\nota_password: …", value: this._importSecrets || "",
+        onInput: (e) => { this._importSecrets = e.target.value; } }));
+      parts.push(h("div", { class: "row", style: "margin-top:10px" },
+        h("button", { class: "primary", onClick: () => this._doImport() }, "Importieren")));
+    }
+    return h("div", { class: "field" }, ...parts);
   }
 
   async _doImport() {
@@ -873,6 +903,9 @@ class ESPHomeStudioPanel extends HTMLElement {
     if (res.project.use_secrets) {
       notes.push("Das Studio nennt die Schlüssel im secrets.yaml-Block nach dem Gerät (z. B. gerät_api_key). Die Zeilen aus dem Reiter „secrets.yaml“ bitte in deine secrets.yaml übernehmen.");
     }
+    const empty = this._srcLoaded ? this._secretStatus().filter((x) => !x.known).map((x) => x.key) : [];
+    if (empty.length) notes.push(`${tx("Diese Secrets sind leer geblieben und müssen ergänzt werden:")} ${empty.join(", ")}`);
+    this._srcLoaded = "";
     this._importReport = { notes, unmapped: res.unmapped, extra: !!res.project.extra_yaml };
     this._importOpen = false;
     this._importText = "";
