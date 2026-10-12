@@ -764,8 +764,8 @@ class ESPHomeStudioPanel extends HTMLElement {
         this._projFile = h("input", { type: "file", accept: ".json,application/json", style: "display:none",
           onChange: (e) => { this._importProjectFile(e.target.files[0]); e.target.value = ""; } }),
         h("button", { title: "Bestehende Geräte-YAML aus dem ESPHome Device Builder oder Ordner laden und auf den aktuellen Stand bringen",
-          onClick: () => { this._importOpen = true; this._renderAll(); this._loadSourceList(); } }, "Aus ESPHome laden"),
-        this.simple ? null : h("button", { onClick: () => { this._importOpen = !this._importOpen; this._renderAll(); } }, "YAML importieren"),
+          onClick: () => { this._importOpen = true; this._renderAll(); this._loadSourceList(); this._loadStoreInfo(); } }, "Aus ESPHome laden"),
+        this.simple ? null : h("button", { onClick: () => { this._importOpen = !this._importOpen; this._renderAll(); if (this._importOpen) this._loadStoreInfo(); } }, "YAML importieren"),
         h("span", { class: "spacer" }),
         h("button", { class: "danger", onClick: () => this._delete() }, "Löschen")),
       h("p", { class: "hint" }, "Projekte bleiben in Home Assistant gespeichert. Die erzeugte YAML-Datei kopierst du in ESPHome."));
@@ -778,8 +778,9 @@ class ESPHomeStudioPanel extends HTMLElement {
     const sec = h("textarea", { class: "mono", rows: "4", placeholder: "wifi_ssid: \"…\"\nwifi_password: \"…\"\napi_key: …",
       value: this._importSecrets || "", onInput: (e) => { this._importSecrets = e.target.value; } });
     const src = this._sourceBox();
+    const store = this._storeBox();
     if (this.simple) {
-      return h("div", { class: "card" }, h("h2", {}, "Bestehende YAML importieren"), src,
+      return h("div", { class: "card" }, h("h2", {}, "Bestehende YAML importieren"), src, store,
         h("div", { class: "row", style: "margin-top:10px" }, h("button", { onClick: () => { this._importOpen = false; this._renderAll(); } }, "Abbrechen")),
         this._importError ? h("div", { class: "msg err" }, this._importError) : null);
     }
@@ -791,6 +792,7 @@ class ESPHomeStudioPanel extends HTMLElement {
       h("div", { class: "row", style: "margin-top:10px" },
         h("button", { class: "primary", onClick: () => this._doImport() }, "Importieren"),
         h("button", { onClick: () => { this._importOpen = false; this._renderAll(); } }, "Abbrechen")),
+      store,
       this._importError ? h("div", { class: "msg err" }, this._importError) : null);
   }
 
@@ -812,6 +814,44 @@ class ESPHomeStudioPanel extends HTMLElement {
     body.push(h("button", { onClick: () => this._loadSourceList() }, "Liste aktualisieren"));
     if (this._srcLoaded && (this._importText || "").trim()) body.push(this._secretReview());
     return h("div", { class: "field" }, h("label", {}, "Aus ESPHome laden"), ...body);
+  }
+
+  _storeBox() {
+    const n = (this._storeKeys || []).length;
+    const text = h("textarea", { class: "mono", rows: "5", placeholder: "wifi_ssid: \"…\"\napi_key: …\nota_password: …",
+      value: this._storeText || "", onInput: (e) => { this._storeText = e.target.value; } });
+    const ok = h("input", { type: "checkbox", checked: !!this._storeOk, onChange: (e) => { this._storeOk = e.target.checked; this._renderAll(); } });
+    const save = h("button", { class: "primary", onClick: () => this._storeSave() }, "Im Secrets-Speicher sichern");
+    if (!this._storeOk) save.disabled = true;
+    return h("details", { class: "field", open: !!this._storeOpen || undefined,
+      onToggle: (e) => { this._storeOpen = e.target.open; } },
+      h("summary", {}, `${tx("Secrets-Speicher (optional, auf eigene Gefahr)")}${n ? ` · ${n} ${tx("Einträge")}` : ""}`),
+      h("p", { class: "hint" }, "Hier kannst du deine ganze secrets.yaml einmal ablegen. Bei jedem Import werden die benutzten !secret-Werte daraus ergänzt, auch gemeinsame API-Schlüssel und Passwörter. Die Werte liegen im Klartext im Speicher von Home Assistant (.storage, also auch in Backups). Das Panel zeigt sie nie wieder an."),
+      text,
+      h("label", { class: "check" }, ok, "Ich verstehe das Risiko und möchte meine Secrets hier speichern"),
+      h("div", { class: "row", style: "margin-top:10px" }, save,
+        n ? h("button", { class: "danger", onClick: () => this._storeClear() }, "Secrets-Speicher leeren") : null),
+      this._storeError ? h("div", { class: "msg err" }, this._storeError) : null);
+  }
+
+  async _loadStoreInfo() {
+    try { this._storeKeys = (await this._ws("secret_store", { action: "info" })).keys; } catch { this._storeKeys = []; }
+    this._renderAll();
+  }
+
+  async _storeSave() {
+    this._storeError = "";
+    try {
+      this._storeKeys = (await this._ws("secret_store", { action: "set", text: this._storeText || "" })).keys;
+      this._storeText = ""; this._storeOk = false;
+    } catch (err) { this._storeError = err?.message || tx("Fehler"); }
+    this._renderAll();
+  }
+
+  async _storeClear() {
+    this._storeError = "";
+    try { this._storeKeys = (await this._ws("secret_store", { action: "clear" })).keys; } catch (err) { this._storeError = err?.message || tx("Fehler"); }
+    this._renderAll();
   }
 
   async _loadSourceList() {
@@ -848,7 +888,7 @@ class ESPHomeStudioPanel extends HTMLElement {
     const have = this.secrets || {};
     return keys.map((k) => ({
       key: k,
-      known: given.has(k) || (k === "wifi_ssid" && !!have.wifi_ssid) || (k === "wifi_password" && !!have.wifi_password),
+      known: given.has(k) || (this._storeKeys || []).includes(k) || (k === "wifi_ssid" && !!have.wifi_ssid) || (k === "wifi_password" && !!have.wifi_password),
     }));
   }
 

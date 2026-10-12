@@ -35,6 +35,7 @@ from .deploy import (DEFAULT_DIR, DeployError, list_from_dashboard, list_from_fo
                      read_from_folder, read_secrets_from_folder, version_tuple, write_to_dashboard, write_to_folder)
 from .i18n import LANGS, tr, tr_struct, ui_dictionary, use_lang
 from .importer import import_yaml
+from .yamlutil import load_text
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,11 +57,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = await store.async_load() or {}
     data.setdefault("projects", {})
     data.setdefault("secrets", {})
+    data.setdefault("secret_store", {})
     hass.data[DOMAIN] = {"store": store, "data": data}
 
     if not hass.data.get(WS_REGISTERED):
         for handler in (ws_meta, ws_board, ws_catalog, ws_import, ws_list, ws_get, ws_save, ws_delete, ws_new, ws_generate, ws_set_secrets,
-                        ws_random, ws_deploy_settings, ws_deploy, ws_i18n, ws_source_list, ws_source_get):
+                        ws_random, ws_deploy_settings, ws_deploy, ws_i18n, ws_source_list, ws_source_get, ws_secret_store):
             websocket_api.async_register_command(hass, handler)
         hass.data[WS_REGISTERED] = True
 
@@ -269,7 +271,19 @@ async def ws_import(hass, connection, msg):
     if len(msg["yaml"]) > MAX_PROJECT_BYTES or len(msg.get("secrets", "")) > MAX_PROJECT_BYTES:
         connection.send_error(msg["id"], "too_large", tr("Die YAML ist zu groß.", _lang(msg)))
         return
-    connection.send_result(msg["id"], await hass.async_add_executor_job(import_yaml, msg["yaml"], msg.get("secrets", ""), _lang(msg)))
+    # Gespeicherter Secrets-Speicher (opt-in) zuerst, die eingefügten Zeilen überschreiben ihn
+    store = (hass.data.get(DOMAIN) or {}).get("data", {}).get("secret_store") or {}
+    secrets_text = msg.get("secrets", "")
+    if store:
+        merged = dict(store)
+        try:
+            extra = load_text(secrets_text) if secrets_text.strip() else {}
+        except ValueError:
+            extra = None  # kaputte Eingabe: wie bisher vom Importer melden lassen
+        if isinstance(extra, dict):
+            merged.update(extra)
+            secrets_text = "".join(f"{k}: {json.dumps(v, ensure_ascii=False)}\n" for k, v in merged.items())
+    connection.send_result(msg["id"], await hass.async_add_executor_job(import_yaml, msg["yaml"], secrets_text, _lang(msg)))
 
 
 @websocket_api.websocket_command({vol.Required("type"): "esphome_studio/generate", vol.Optional("lang"): str, vol.Required("project"): dict})
@@ -448,3 +462,49 @@ async def ws_source_get(hass, connection, msg):
     got = await _source_call(hass, connection, msg, lg, dash_fn, folder_fn)
     if got:
         connection.send_result(msg["id"], {"source": got[0], **got[2]})
+
+
+MAX_STORE_KEYS = 2000
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/secret_store",
+    vol.Optional("lang"): str,
+    vol.Required("action"): vol.In(["info", "set", "clear"]),
+    vol.Optional("text"): str,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_secret_store(hass, connection, msg):
+    """Optionaler Secrets-Speicher für Importe. Werte werden nie an das Panel zurückgegeben, nur die Namen."""
+    lg = _lang(msg)
+    st = _state(hass, connection, msg["id"], lg)
+    if not st:
+        return
+    data = st["data"]
+    if msg["action"] == "clear":
+        data["secret_store"] = {}
+        await st["store"].async_save(data)
+    elif msg["action"] == "set":
+        text = msg.get("text", "")
+        if len(text) > MAX_PROJECT_BYTES:
+            connection.send_error(msg["id"], "too_large", tr("Die YAML ist zu groß.", lg))
+            return
+        try:
+            parsed = load_text(text) if text.strip() else {}
+        except ValueError as exc:
+            connection.send_error(msg["id"], "invalid", tr(str(exc), lg))
+            return
+        if not isinstance(parsed, dict):
+            connection.send_error(msg["id"], "invalid", tr("Die secrets.yaml muss aus Zeilen „schlüssel: wert“ bestehen.", lg))
+            return
+        new = {str(k): v for k, v in parsed.items()
+               if isinstance(v, (str, int, float)) and not isinstance(v, bool) and len(str(k)) <= 100 and len(str(v)) <= 1000}
+        merged = {**data.get("secret_store", {}), **new}
+        if len(merged) > MAX_STORE_KEYS:
+            connection.send_error(msg["id"], "too_large", tr("Zu viele Einträge im Secrets-Speicher.", lg))
+            return
+        data["secret_store"] = merged
+        await st["store"].async_save(data)
+    keys = sorted(data.get("secret_store", {}))
+    connection.send_result(msg["id"], {"keys": keys, "count": len(keys)})

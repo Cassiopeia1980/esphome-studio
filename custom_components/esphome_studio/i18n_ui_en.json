@@ -378,5 +378,11 @@
  "Fehlende Werte als Zeilen „schlüssel: wert“ aus deiner secrets.yaml einfügen. Es werden nur die benutzten Schlüssel übernommen.": "Paste the missing values as “key: value” lines from your secrets.yaml. Only the keys that are used are taken.",
  "Die YAML benutzt keine Secrets.": "The YAML uses no secrets.",
  "Laden": "Load",
- "Diese Secrets sind leer geblieben und müssen ergänzt werden:": "These secrets stayed empty and need to be added:"
+ "Diese Secrets sind leer geblieben und müssen ergänzt werden:": "These secrets stayed empty and need to be added:",
+ "Secrets-Speicher (optional, auf eigene Gefahr)": "Secrets store (optional, at your own risk)",
+ "Einträge": "entries",
+ "Hier kannst du deine ganze secrets.yaml einmal ablegen. Bei jedem Import werden die benutzten !secret-Werte daraus ergänzt, auch gemeinsame API-Schlüssel und Passwörter. Die Werte liegen im Klartext im Speicher von Home Assistant (.storage, also auch in Backups). Das Panel zeigt sie nie wieder an.": "Here you can store your whole secrets.yaml once. On every import the !secret values that are used are filled in from it, including shared API keys and passwords. The values are kept in plain text in Home Assistant storage (.storage, so also in backups). The panel never shows them again.",
+ "Ich verstehe das Risiko und möchte meine Secrets hier speichern": "I understand the risk and want to store my secrets here",
+ "Im Secrets-Speicher sichern": "Save to secrets store",
+ "Secrets-Speicher leeren": "Clear secrets store"
 }

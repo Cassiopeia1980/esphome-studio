@@ -53,6 +53,15 @@ elif t == "source_list":
 elif t == "source_get":
     res = {"source": "folder", "yaml": "esphome:\n  name: kueche\nesp32:\n  board: esp32dev\nwifi:\n  ssid: !secret wifi_ssid\n",
            "secrets": "wifi_ssid: \"Heim\"\n"}
+elif t == "secret_store":
+    ss = state.setdefault("secret_store", {})
+    if msg["action"] == "set":
+        for ln in msg.get("text", "").splitlines():
+            if ":" in ln:
+                k, v = ln.split(":", 1); ss[k.strip()] = v.strip()
+    elif msg["action"] == "clear":
+        ss.clear()
+    res = {"keys": sorted(ss), "count": len(ss)}
 elif t == "i18n":
     res = {"dict": i18n.ui_dictionary(lang)}
 else:

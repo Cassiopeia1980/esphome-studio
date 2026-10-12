@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.0
+- Neu: optionaler **Secrets-Speicher** (auf eigene Gefahr): die ganze secrets.yaml einmal ablegen, beim Import werden benutzte `!secret`-Werte automatisch ergänzt (gemeinsame API-Schlüssel und Passwörter bleiben dadurch erhalten); eingefügte Zeilen haben Vorrang
+- Werte werden nie an das Panel zurückgegeben, nur die Namen; neuer Websocket-Befehl `secret_store`
+
 ## 0.10.1
 - „Aus ESPHome laden“ importiert nicht mehr sofort: erst „Laden“, dann Secret-Prüfung (bekannt/fehlt, fehlende Werte einfügen), dann „Importieren“; der Bericht nennt leer gebliebene Secrets
 

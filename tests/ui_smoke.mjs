@@ -220,6 +220,28 @@ check("Debug-Intervall-Feld erscheint", !!([...card("WLAN").querySelectorAll("in
   check("Import aus ESPHome: kein Fehler", ![...root.querySelectorAll(".msg.err")].length);
 }
 
+// --- Secrets-Speicher ---
+{
+  button(card("Projekte"), "Aus ESPHome laden").click();
+  await sleep(500);
+  const imp = card("Bestehende YAML");
+  const det = [...imp.querySelectorAll("details")].find((d) => d.textContent.includes("Secrets-Speicher"));
+  check("Secrets-Speicher-Bereich da", !!det);
+  const save = button(det, "Im Secrets-Speicher sichern");
+  check("Sichern erst nach Haken möglich", save.disabled === true);
+  setValue(det.querySelector("textarea"), "api_key: abc\nwifi_ssid: Heim\n");
+  det.querySelector("input[type=checkbox]").click();
+  await sleep(200);
+  const det2 = [...card("Bestehende YAML").querySelectorAll("details")].find((d) => d.textContent.includes("Secrets-Speicher"));
+  button(det2, "Im Secrets-Speicher sichern").click();
+  await sleep(500);
+  const det3 = [...card("Bestehende YAML").querySelectorAll("details")].find((d) => d.textContent.includes("Secrets-Speicher"));
+  check("Speicher zeigt Anzahl", /2 Einträge/.test(det3.querySelector("summary").textContent), det3.querySelector("summary").textContent);
+  check("Werte werden nie angezeigt", !card("Bestehende YAML").textContent.includes("abc"));
+  button(card("Bestehende YAML"), "Abbrechen").click();
+  await sleep(100);
+}
+
 // --- Katalog ---
 {
   const det = () => card("Komponenten").querySelector("details");

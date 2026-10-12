@@ -179,3 +179,24 @@ async def test_ws_source(setup, hass, tmp_path):  # noqa: F811
     await call(ws, "deploy_settings", target_dir="/etc")
     r = await call(ws, "source_list")
     assert not r["success"] and r["error"]["code"] == "source_failed"
+
+
+async def test_secret_store_used_by_import(setup, hass):  # noqa: F811
+    _entry, ws = setup
+    yaml_text = ("esphome:\n  name: lampe\nesp8266:\n  board: d1_mini\nwifi:\n  ssid: !secret wifi_ssid\n  password: !secret wifi_password\n"
+                 "api:\n  encryption:\n    key: !secret shared_key\nota:\n  - platform: esphome\n    password: !secret ota_pw\n")
+    r = await call(ws, "secret_store", action="set",
+                   text='wifi_ssid: "Heim"\nwifi_password: "pw"\nshared_key: "' + "A" * 43 + '="\nota_pw: "geheim"\n')
+    assert r["success"] and r["result"]["count"] == 4 and "geheim" not in str(r["result"])
+    r = await call(ws, "import", yaml=yaml_text)
+    p = r["result"]["project"]
+    assert r["result"]["ok"] and p["api"]["key"].startswith("AAAA") and p["ota"]["password"] == "geheim"
+    # eingefügte Zeilen haben Vorrang
+    r = await call(ws, "import", yaml=yaml_text, secrets='ota_pw: "anders"\n')
+    assert r["result"]["project"]["ota"]["password"] == "anders"
+    r = await call(ws, "secret_store", action="set", text="a: [kaputt")
+    assert not r["success"]
+    r = await call(ws, "secret_store", action="clear")
+    assert r["result"]["count"] == 0
+    r = await call(ws, "import", yaml=yaml_text)
+    assert r["result"]["project"]["api"]["key"] == ""
