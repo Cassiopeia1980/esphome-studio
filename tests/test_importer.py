@@ -197,10 +197,22 @@ def test_diag_block_with_own_names_is_recognised_and_kept():
     assert "debug:\n  update_interval: 30s" in y
 
 
-def test_default_light_restore_mode_and_unknown_effects_message():
+def test_light_restore_mode_is_kept_and_default_is_not_emitted():
+    """RESTORE_DEFAULT_OFF ist eine echte Einstellung (ESPHome-Standard ist ALWAYS_OFF) und darf nicht verloren gehen."""
+    res = imp.import_yaml((SAMPLES / "aquarium_fx.yaml").read_text(), AQ_SECRETS)
+    assert res["ok"] and res["unmapped"] == []
+    comp = [c for c in res["project"]["components"] if c["type"] == "light_rgbw"][0]
+    assert comp["options"]["restore_mode"] == "RESTORE_DEFAULT_OFF"
+    out = gen.generate(res["project"], STORED)
+    assert "restore_mode: RESTORE_DEFAULT_OFF" in out["yaml"]
+    p = gen.default_project("d1_mini")
+    p["components"] = [gen.new_component("light_pwm", "Lampe", {"pin": "GPIO5"})]
+    assert "restore_mode" not in gen.generate(p, STORED)["yaml"]
+
+
+def test_light_with_three_phase_strobe_stays_in_extra_yaml():
     res = imp.import_yaml((SAMPLES / "aquarium.yaml").read_text(), AQ_SECRETS)
     assert res["ok"]
-    # Dreifarbiges Strobe-Beispiel kann das Studio nicht abbilden -> Zusatz-YAML mit der richtigen Begründung
     assert any("eigene Lichteffekte" in u for u in res["unmapped"]), res["unmapped"]
 
 

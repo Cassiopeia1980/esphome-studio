@@ -514,13 +514,16 @@ def e_light_binary(ctx: Ctx, c: dict[str, Any]) -> None:
     if pin:
         ctx.add("output", {"platform": "gpio", "id": oid,
                            "pin": ctx.pin_cfg(pin, inverted=bool(_opt(c, "inverted")))})
-    ctx.add("light", {"platform": "binary", "name": _light_name(ctx, c), "id": ctx.cid(c), "output": oid})
+    d: dict[str, Any] = {"platform": "binary", "name": _light_name(ctx, c), "id": ctx.cid(c), "output": oid}
+    _light_restore(c, d)
+    ctx.add("light", d)
 
 
 def e_light_pwm(ctx: Ctx, c: dict[str, Any]) -> None:
     oid = _pwm_output(ctx, c, "pin")
     d: dict[str, Any] = {"platform": "monochromatic", "name": _light_name(ctx, c), "id": ctx.cid(c),
                          "output": oid or "FEHLT"}
+    _light_restore(c, d)
     fx = _effects(c, False)
     if fx:
         d["effects"] = fx
@@ -548,6 +551,12 @@ def _effects(c: dict[str, Any], color: bool) -> list[dict[str, Any]]:
     return fx
 
 
+def _light_restore(c: dict[str, Any], d: dict[str, Any]) -> None:
+    rm = _opt(c, "restore_mode")
+    if rm and rm != "ALWAYS_OFF":  # ALWAYS_OFF ist der ESPHome-Standard bei Lichtern
+        d["restore_mode"] = rm
+
+
 def _light_name(ctx: Ctx, c: dict[str, Any]) -> Any:
     if _opt(c, "name_none"):
         if not ctx.friendly:
@@ -571,6 +580,7 @@ def _color_light(ctx: Ctx, c: dict[str, Any], platform: str, channels: list[tupl
                 ctx.err(f"„{c['name']}“: ungültige Farbtemperatur.")
     if platform in ("rgbw", "rgbww") and _opt(c, "color_interlock"):
         d["color_interlock"] = True
+    _light_restore(c, d)
     fx = _effects(c, True)
     if fx:
         d["effects"] = fx

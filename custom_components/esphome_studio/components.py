@@ -58,6 +58,10 @@ NAME_NONE = _bool("name_none", "Name = Gerätename", False,
 FX_PULSE = _bool("fx_pulse", "Effekte: Pulsieren (schnell + langsam)", False)
 FX_RANDOM = _bool("fx_random", "Effekte: Zufällig (schnell + langsam)", False)
 FX_STROBE = _bool("fx_strobe", "Effekt: Blitzen", False)
+LIGHT_RESTORE_MODES = ["ALWAYS_OFF", "RESTORE_DEFAULT_OFF", "RESTORE_DEFAULT_ON", "ALWAYS_ON", "RESTORE_INVERTED_DEFAULT_OFF",
+                       "RESTORE_INVERTED_DEFAULT_ON", "RESTORE_AND_OFF", "RESTORE_AND_ON"]
+LIGHT_RESTORE = _select("restore_mode", "Zustand nach Neustart", LIGHT_RESTORE_MODES, "ALWAYS_OFF",
+                        "Standard: immer aus. „RESTORE_DEFAULT_OFF“ stellt den letzten Zustand wieder her (Standard aus).")
 FREQUENCY = _num("frequency", "PWM-Frequenz", "", 1, 40000, "Hz",
                  "Leer lassen = Standard (1000 Hz). Höher = weniger Flackern, z. B. 19531 Hz.")
 UPDATE60 = _text("update_interval", "Messintervall", "60s", "z. B. 10s, 60s, 5min", "60s")
@@ -87,23 +91,23 @@ COMPONENTS: dict[str, dict[str, Any]] = {
     "light_binary": {
         "label": "Licht an/aus", "group": GROUP_LIGHT, "platforms": ALL, "icon": "mdi:lightbulb",
         "pins": [_pin("pin", "Pin", "out")],
-        "options": [INVERTED, NAME_NONE],
+        "options": [INVERTED, NAME_NONE, LIGHT_RESTORE],
     },
     "light_pwm": {
         "label": "Licht dimmbar (PWM)", "group": GROUP_LIGHT, "platforms": ALL, "icon": "mdi:lightbulb-on",
         "pins": [_pin("pin", "Pin", "pwm")],
-        "options": [INVERTED, FREQUENCY, NAME_NONE, FX_PULSE, FX_RANDOM, FX_STROBE],
+        "options": [INVERTED, FREQUENCY, NAME_NONE, LIGHT_RESTORE, FX_PULSE, FX_RANDOM, FX_STROBE],
     },
     "light_rgb": {
         "label": "RGB-Licht (3 PWM-Kanäle)", "group": GROUP_LIGHT, "platforms": ALL, "icon": "mdi:palette",
         "pins": [_pin("red", "Rot", "pwm"), _pin("green", "Grün", "pwm"), _pin("blue", "Blau", "pwm")],
-        "options": [INVERTED, FREQUENCY, NAME_NONE, FX_PULSE, FX_RANDOM, FX_STROBE],
+        "options": [INVERTED, FREQUENCY, NAME_NONE, LIGHT_RESTORE, FX_PULSE, FX_RANDOM, FX_STROBE],
     },
     "light_rgbw": {
         "label": "RGBW-Licht (4 PWM-Kanäle)", "group": GROUP_LIGHT, "platforms": ALL, "icon": "mdi:palette",
         "pins": [_pin("red", "Rot", "pwm"), _pin("green", "Grün", "pwm"), _pin("blue", "Blau", "pwm"),
                  _pin("white", "Weiß", "pwm")],
-        "options": [INVERTED, FREQUENCY, NAME_NONE, FX_PULSE, FX_RANDOM, FX_STROBE,
+        "options": [INVERTED, FREQUENCY, NAME_NONE, LIGHT_RESTORE, FX_PULSE, FX_RANDOM, FX_STROBE,
                     _bool("color_interlock", "Weiß und Farbe nicht gleichzeitig", False)],
     },
     "light_rgbww": {
@@ -113,7 +117,7 @@ COMPONENTS: dict[str, dict[str, Any]] = {
         "options": [INVERTED, FREQUENCY,
                     _num("cold_temp", "Farbtemperatur Kaltweiß", 6500, 1000, 10000, "K"),
                     _num("warm_temp", "Farbtemperatur Warmweiß", 2700, 1000, 10000, "K"),
-                    NAME_NONE, FX_PULSE, FX_RANDOM, FX_STROBE,
+                    NAME_NONE, LIGHT_RESTORE, FX_PULSE, FX_RANDOM, FX_STROBE,
                     _bool("color_interlock", "Weiß und Farbe nicht gleichzeitig", False)],
     },
     "light_strip": {

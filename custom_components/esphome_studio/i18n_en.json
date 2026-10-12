@@ -423,5 +423,7 @@
  "Die Datei „{0}“ gibt es im Ordner nicht.": "The file \"{0}\" does not exist in the folder.",
  "Der Ordner „{0}“ existiert nicht.": "The folder \"{0}\" does not exist.",
  "Die secrets.yaml muss aus Zeilen „schlüssel: wert“ bestehen.": "The secrets.yaml must consist of “key: value” lines.",
- "Zu viele Einträge im Secrets-Speicher.": "Too many entries in the secrets store."
+ "Zu viele Einträge im Secrets-Speicher.": "Too many entries in the secrets store.",
+ "restore_mode nicht abbildbar": "restore_mode cannot be mapped",
+ "Standard: immer aus. „RESTORE_DEFAULT_OFF“ stellt den letzten Zustand wieder her (Standard aus).": "Default: always off. “RESTORE_DEFAULT_OFF” restores the last state (default off)."
 }

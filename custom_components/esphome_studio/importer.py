@@ -14,7 +14,7 @@ from collections import Counter
 from typing import Any
 
 from . import boards as B
-from .components import COMPONENTS
+from .components import COMPONENTS, LIGHT_RESTORE_MODES
 from .catalog import catalog as _catalog
 from .i18n import T, tr, use_lang
 from .generator import _cur_lang, uptime_format, LOG_LEVELS, spec_for, PWM_PLATFORM, _effects, default_project, dump_yaml, new_component, slug
@@ -385,8 +385,13 @@ class _Importer:
 
     def light(self, item: dict[str, Any], outs: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
         plat = item.get("platform")
-        # restore_mode: RESTORE_DEFAULT_OFF ist bei Lichtern der ESPHome-Standard und braucht kein Feld
-        item = {k: v for k, v in item.items() if not (k == "restore_mode" and v == "RESTORE_DEFAULT_OFF")}
+        restore = None
+        if plat in ("binary", "monochromatic", "rgb", "rgbw", "rgbww"):
+            restore = item.get("restore_mode")
+            if restore is not None:
+                if restore not in LIGHT_RESTORE_MODES:
+                    raise Unmapped("restore_mode nicht abbildbar")
+                item = {k: v for k, v in item.items() if k != "restore_mode"}
         consumed: list[str] = []
         name_raw = item.get("name")
         name_none = (name_raw is None and "name" in item) or str(name_raw) == "None"
@@ -405,12 +410,16 @@ class _Importer:
             c = self.new("light_binary", nm, item, {"pin": pid})
             c["options"]["inverted"] = inv
             c["options"]["name_none"] = name_none
+            if restore:
+                c["options"]["restore_mode"] = restore
             return c, [oid]
         if plat == "monochromatic":
             _only(item, base_keys | {"output"})
             pid, inv, fr, _ = self.pwm_channel(item.get("output"), outs)
             c = self.new("light_pwm", nm, item, {"pin": pid})
             c["options"].update(inverted=inv, frequency=fr, name_none=name_none)
+            if restore:
+                c["options"]["restore_mode"] = restore
             self.map_effects(item, False, c["options"])
             return c, [item["output"]]
         chans = {"rgb": [("red", "red"), ("green", "green"), ("blue", "blue")],
@@ -437,6 +446,8 @@ class _Importer:
                 raise Unmapped("Kanäle haben unterschiedliche Invertierung/Frequenz")
             c = self.new(f"light_{plat}", nm, item, pins)
             c["options"].update(inverted=invs.pop(), frequency=freqs.pop(), name_none=name_none)
+            if restore:
+                c["options"]["restore_mode"] = restore
             if plat in ("rgbw", "rgbww"):
                 c["options"]["color_interlock"] = bool(item.get("color_interlock", False))
             if plat == "rgbww":
