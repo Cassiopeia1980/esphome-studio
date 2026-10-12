@@ -1088,6 +1088,8 @@ class ESPHomeStudioPanel extends HTMLElement {
         this.p.web_server ? this._webBox() : null,
         this._check("time_ha", "Uhrzeit von Home Assistant"),
         h("h3", {}, "Diagnose-Entitäten"),
+        Object.keys(this.p.diag_custom || {}).length
+          ? h("p", { class: "hint" }, "Eigene Namen, Symbole und Formate aus dem Import bleiben für diese Diagnose-Entitäten erhalten.") : null,
         this._check("diag.status", "Status (verbunden/getrennt)", "Binärer Sensor „Status“, zeigt, ob das Gerät erreichbar ist."),
         this._check("diag.wifi_signal", "WLAN-Signal"),
         this._check("diag.uptime", "Laufzeit (Sekunden)"),

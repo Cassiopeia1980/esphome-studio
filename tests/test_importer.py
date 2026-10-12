@@ -170,3 +170,43 @@ def test_catalog_import_keeps_unsupported_as_extra_yaml():
     assert res["ok"]
     assert any("filters" in u for u in res["unmapped"]), res["unmapped"]
     assert "multiply" in res["project"]["extra_yaml"]
+
+
+SAMPLES = Path(__file__).parent / "samples"
+AQ_SECRETS = 'ota: "geheim123456"\nwifi_ssid: "Heim"\nwifi_password: "passwort123"\nap_password: "apapapap1234"\n'
+
+
+def test_diag_block_with_own_names_is_recognised_and_kept():
+    """Diagnose-Block mit eigenen Namen, ohne entity_category: erkannt, Namen und Format bleiben erhalten."""
+    res = imp.import_yaml((SAMPLES / "aquarium_fx.yaml").read_text(), AQ_SECRETS)
+    assert res["ok"], res["errors"]
+    assert res["unmapped"] == []
+    p = res["project"]
+    d = p["diag"]
+    assert all(d[k] for k in ("wifi_signal", "restart", "status", "ip", "ssid", "bssid", "mac", "uptime_text",
+                              "debug_heap", "debug_loop", "debug_reset"))
+    assert p["diag_custom"]["bssid"]["name"] == "Connected BSSID"
+    assert p["diag_custom"]["restart"]["name"] == "Reboot"
+    out = gen.generate(p, STORED)
+    assert out["ok"], out["errors"]
+    y = out["yaml"]
+    for must in ("name: Connected BSSID", "name: Mac Wifi Address", "name: Reboot", "name: WiFi Signal", "name: Reset Reason",
+                 "name: Fast Pulse", "name: Strobe Effect", "name: Betriebszeit"):
+        assert must in y, must
+    assert "entity_category" not in y  # im Original nicht vorhanden
+    assert "debug:\n  update_interval: 30s" in y
+
+
+def test_default_light_restore_mode_and_unknown_effects_message():
+    res = imp.import_yaml((SAMPLES / "aquarium.yaml").read_text(), AQ_SECRETS)
+    assert res["ok"]
+    # Dreifarbiges Strobe-Beispiel kann das Studio nicht abbilden -> Zusatz-YAML mit der richtigen Begründung
+    assert any("eigene Lichteffekte" in u for u in res["unmapped"]), res["unmapped"]
+
+
+def test_standard_diag_roundtrip_unchanged():
+    p = gen.default_project("d1_mini")
+    p["diag"].update(wifi_signal=True, uptime=True, restart=True, status=True, uptime_text=True, ip=True)
+    r, res = roundtrip(p)
+    assert res["project"]["diag"]["uptime_text"] and res["project"]["diag"]["ip"]
+    assert not res["project"].get("diag_custom")

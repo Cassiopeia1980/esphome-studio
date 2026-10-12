@@ -541,6 +541,10 @@ def _effects(c: dict[str, Any], color: bool) -> list[dict[str, Any]]:
             on.update({"red": "100%", "green": "90%", "blue": "0%"})
         on["duration"] = "500ms"
         fx.append({"strobe": {"name": "Blitzen", "colors": [on, {"state": False, "duration": "250ms"}]}})
+    names = _opt(c, "fx_names")
+    if isinstance(names, list) and len(names) == len(fx) and all(isinstance(n, str) and n for n in names):
+        for e, n in zip(fx, names):  # eigene Namen aus einem Import
+            next(iter(e.values()))["name"] = n
     return fx
 
 
@@ -1382,31 +1386,53 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
         else:
             out[k] = v
 
-    # Diagnose-Entitäten
+    # Diagnose-Entitäten (eigene Namen, Symbole und Kategorien aus einem Import bleiben über diag_custom erhalten)
     diag = p.get("diag") or {}
+
+    def ent(key: str, name: str, icon: str | None = None, cat: str | None = "diagnostic") -> dict[str, Any]:
+        c = (p.get("diag_custom") or {}).get(key) or {}
+        d: dict[str, Any] = {"name": c.get("name", name)}
+        ic = c.get("icon", icon)
+        if ic:
+            d["icon"] = ic
+        ca = c.get("category", cat)
+        if ca:
+            d["entity_category"] = ca
+        return d
+
+    def with_ent(base: dict[str, Any], key: str, name: str, icon: str | None = None, cat: str | None = "diagnostic",
+                 after: dict[str, Any] | None = None) -> dict[str, Any]:
+        e = ent(key, name, icon, cat)
+        out_: dict[str, Any] = {**base, "name": e["name"]}
+        if "icon" in e:
+            out_["icon"] = e["icon"]
+        out_.update(after or {})
+        if "entity_category" in e:
+            out_["entity_category"] = e["entity_category"]
+        return out_
+
     if diag.get("wifi_signal"):
-        ctx.add("sensor", {"platform": "wifi_signal", "name": T("WLAN-Signal"), "update_interval": "60s",
-                           "entity_category": "diagnostic"})
+        ctx.add("sensor", with_ent({"platform": "wifi_signal"}, "wifi_signal", T("WLAN-Signal"), None, "diagnostic",
+                                   {"update_interval": "60s"}))
     if diag.get("uptime"):
-        ctx.add("sensor", {"platform": "uptime", "name": T("Laufzeit"), "entity_category": "diagnostic"})
+        ctx.add("sensor", with_ent({"platform": "uptime"}, "uptime", T("Laufzeit")))
     if diag.get("uptime_text"):
-        ctx.add("text_sensor", {
-            "platform": "uptime", "name": T("Betriebszeit"), "icon": "mdi:clock-start", "update_interval": "60s",
-            "entity_category": "diagnostic",
-            "format": uptime_format(_cur_lang())})
+        fmt = (p.get("diag_custom") or {}).get("uptime_text", {}).get("format") or uptime_format(_cur_lang())
+        ctx.add("text_sensor", with_ent({"platform": "uptime"}, "uptime_text", T("Betriebszeit"), "mdi:clock-start", "diagnostic",
+                                        {"update_interval": "60s"}) | {"format": fmt})
     wifi_info: dict[str, Any] = {"platform": "wifi_info"}
     for key, conf, label, icon in (("ip", "ip_address", T("IP-Adresse"), "mdi:ip-network"),
                                    ("ssid", "ssid", T("Verbunden mit (SSID)"), "mdi:access-point-network"),
                                    ("bssid", "bssid", T("Verbunden mit (BSSID)"), "mdi:access-point"),
                                    ("mac", "mac_address", T("MAC-Adresse"), "mdi:ip")):
         if diag.get(key):
-            wifi_info[conf] = {"name": label, "icon": icon, "entity_category": "diagnostic"}
+            wifi_info[conf] = ent(key, label, icon)
     if len(wifi_info) > 1:
         ctx.add("text_sensor", wifi_info)
     if diag.get("status"):
-        ctx.add("binary_sensor", {"platform": "status", "name": "Status", "entity_category": "diagnostic"})
+        ctx.add("binary_sensor", with_ent({"platform": "status"}, "status", "Status"))
     if diag.get("restart"):
-        ctx.add("button", {"platform": "restart", "name": T("Neustart"), "entity_category": "config"})
+        ctx.add("button", with_ent({"platform": "restart"}, "restart", T("Neustart"), None, "config"))
     if diag.get("debug_heap") or diag.get("debug_loop") or diag.get("debug_reset"):
         interval = str(p.get("debug_interval") or "30s").strip()
         if not INTERVAL_RE.match(interval):
@@ -1415,15 +1441,14 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
         out_debug: dict[str, Any] = {"update_interval": interval}
         dbg: dict[str, Any] = {"platform": "debug"}
         if diag.get("debug_heap"):
-            dbg["free"] = {"name": T("Freier Heap"), "entity_category": "diagnostic"}
-            dbg["block"] = {"name": T("Größter Heap-Block"), "entity_category": "diagnostic"}
+            dbg["free"] = ent("debug_free", T("Freier Heap"))
+            dbg["block"] = ent("debug_block", T("Größter Heap-Block"))
         if diag.get("debug_loop"):
-            dbg["loop_time"] = {"name": T("Loop-Zeit"), "entity_category": "diagnostic"}
+            dbg["loop_time"] = ent("debug_loop", T("Loop-Zeit"))
         if len(dbg) > 1:
             ctx.add("sensor", dbg)
         if diag.get("debug_reset"):
-            ctx.add("text_sensor", {"platform": "debug",
-                                    "reset_reason": {"name": T("Reset-Grund"), "entity_category": "diagnostic"}})
+            ctx.add("text_sensor", {"platform": "debug", "reset_reason": ent("debug_reset", T("Reset-Grund"))})
         out["debug"] = out_debug
         ctx.warn("Die Debug-Sensoren sind zur Fehlersuche gedacht (Neustarts, Speicher). Danach wieder abschalten.")
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.0
+- Import erkennt Diagnose-Blöcke mit eigenen Namen, Symbolen und Formaten (Uptime/WLAN-Info/Debug/Status/Neustart/WLAN-Signal, auch ohne `entity_category`) und behält sie bei, statt sie ins Zusatz-YAML zu schieben
+- Lichter mit `restore_mode: RESTORE_DEFAULT_OFF` (ESPHome-Standard) und eigenen Effekt-Namen werden übernommen; die Begründung bei nicht abbildbaren Lichteffekten ist jetzt richtig
+
 ## 0.11.1
 - „In ESPHome speichern“ über den Device Builder sichert die vorherige Version: nach dem Speichern gibt es den Knopf „Vorherige Version herunterladen“ (der Device Builder legt selbst keine .bak an)
 - Hinweis zu den Schlüsseln im Import-Bericht erscheint nur noch, wenn wirklich eine API-Verschlüsselung vorhanden ist

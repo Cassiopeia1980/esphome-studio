@@ -1,0 +1,151 @@
+substitutions:
+  devicename: "aquarium"
+  device_description: "Aquarium im Wohnzimmer"
+
+esphome:
+  name: $devicename
+  friendly_name: "Aquarium"
+  comment: ${device_description}
+
+esp8266:
+  board: d1_mini
+  board_flash_mode: dout
+  early_pin_init: false
+
+logger:
+  level: INFO
+
+api:
+
+debug:
+  update_interval: 30s
+
+ota:
+  - platform: esphome
+    password: !secret ota
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  manual_ip:
+    static_ip: 192.168.3.71
+    gateway: 192.168.1.1
+    subnet: 255.255.252.0
+    dns1: 192.168.1.1
+
+  ap:
+    ssid: "${devicename} Fallback AP"
+    password: !secret ap_password
+
+captive_portal:
+
+button:
+  - platform: restart
+    name: "Reboot"
+
+binary_sensor:
+  - platform: status
+    name: "Status"
+
+status_led:
+  pin:
+    number: GPIO2
+    inverted: true
+
+output:
+  - platform: esp8266_pwm
+    id: output_red
+    pin: GPIO5
+  - platform: esp8266_pwm
+    id: output_green
+    pin: GPIO13
+  - platform: esp8266_pwm
+    id: output_blue
+    pin: GPIO15
+  - platform: esp8266_pwm
+    id: output_white
+    pin: GPIO12
+
+light:
+  - platform: rgbw
+    name: None
+    red: output_red
+    green: output_green
+    blue: output_blue
+    white: output_white
+    restore_mode: RESTORE_DEFAULT_OFF
+    effects:
+      - pulse:
+          name: "Fast Pulse"
+          transition_length: 0.5s
+          update_interval: 0.5s
+      - pulse:
+          name: "Slow Pulse"
+          transition_length: 1s
+          update_interval: 2s
+      - random:
+          name: "My Slow Random Effect"
+          transition_length: 30s
+          update_interval: 30s
+      - random:
+          name: "My Fast Random Effect"
+          transition_length: 4s
+          update_interval: 5s
+      - strobe:
+          name: "Strobe Effect"
+          colors:
+            - state: true
+              brightness: 100%
+              red: 100%
+              green: 90%
+              blue: 0%
+              duration: 500ms
+            - state: false
+              duration: 250ms
+            - state: true
+              brightness: 100%
+              red: 0%
+              green: 100%
+              blue: 0%
+              duration: 500ms
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+  - platform: debug
+    free:
+      name: "Freier Heap"
+    block:
+      name: "Größter Heap-Block"
+    loop_time:
+      name: "Loop-Zeit"
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+      icon: mdi:ip-network
+    ssid:
+      name: "Connected SSID"
+      icon: mdi:access-point-network
+    bssid:
+      name: "Connected BSSID"
+      icon: mdi:access-point
+    mac_address:
+      name: "Mac Wifi Address"
+      icon: mdi:ip
+  - platform: uptime
+    name: "Betriebszeit"
+    icon: mdi:clock-start
+    update_interval: 60s
+    format:
+      separator: " "
+      days: "T"
+      hours: "Std"
+      minutes: "Min"
+      seconds: "Sek"
+  - platform: debug
+    reset_reason:
+      name: Reset Reason

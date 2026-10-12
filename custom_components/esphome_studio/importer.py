@@ -349,16 +349,44 @@ class _Importer:
         fx = item.get("effects")
         if fx is None:
             return
+        def bare(lst: Any) -> Any:  # Struktur ohne Effektnamen vergleichen
+            if not isinstance(lst, list):
+                return None
+            out_ = []
+            for e in lst:
+                if not isinstance(e, dict) or len(e) != 1:
+                    return None
+                (kind, conf), = e.items()
+                if not isinstance(conf, dict):
+                    return None
+                out_.append({kind: {k: v for k, v in conf.items() if k != "name"}})
+            return out_
+
+        want = bare(fx)
         for combo in range(8):
             flags = {FX_FLAGS[i]: bool(combo >> i & 1) for i in range(3)}
             fake = {"options": flags}
-            if _effects(fake, color) == fx:
-                opts.update(flags)
-                return
+            std = None
+            for lg in ("de", "en"):
+                with use_lang(lg):
+                    std = _effects(fake, color)
+                if std == fx:
+                    opts.update(flags)
+                    return
+            with use_lang("de"):
+                std = _effects(fake, color)
+            if want is not None and bare(std) == want:
+                names = [next(iter(e.values())).get("name") for e in fx]
+                if all(isinstance(n, str) and n for n in names):
+                    opts.update(flags)
+                    opts["fx_names"] = names  # eigene Effektnamen bleiben erhalten
+                    return
         raise Unmapped("eigene Lichteffekte")
 
     def light(self, item: dict[str, Any], outs: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
         plat = item.get("platform")
+        # restore_mode: RESTORE_DEFAULT_OFF ist bei Lichtern der ESPHome-Standard und braucht kein Feld
+        item = {k: v for k, v in item.items() if not (k == "restore_mode" and v == "RESTORE_DEFAULT_OFF")}
         consumed: list[str] = []
         name_raw = item.get("name")
         name_none = (name_raw is None and "name" in item) or str(name_raw) == "None"
@@ -935,65 +963,113 @@ class _Importer:
                             "bssid": False, "mac": False, "status": False, "uptime_text": False,
                             "debug_heap": False, "debug_loop": False, "debug_reset": False}
 
-        def exact(item: dict[str, Any], expect: dict[str, Any]) -> bool:
-            return item == expect
+        custom: dict[str, dict[str, Any]] = {}
+        p["diag_custom"] = custom
 
-        def diag_one(domain: str, item: dict[str, Any]) -> bool:
+        def ent(d: Any, name: str, icon: str | None = None, cat: str | None = "diagnostic",
+                lenient: bool = False) -> dict[str, Any] | None:
+            """Prüft Name/Symbol/Kategorie eines Diagnose-Eintrags. Streng: nur Standard. Sonst werden eigene Werte gemerkt."""
+            if not isinstance(d, dict) or set(d) - {"name", "icon", "entity_category"}:
+                return None
+            cust: dict[str, Any] = {}
+            n = d.get("name")
+            if not isinstance(n, str) or not n:
+                return None
+            if n != name:
+                cust["name"] = n
+            ic = d.get("icon")
+            if ic != icon:
+                if ic is not None and not isinstance(ic, str):
+                    return None
+                cust["icon"] = ic or ""
+            ca = d.get("entity_category")
+            if ca != cat:
+                if ca is not None and ca not in ("diagnostic", "config"):
+                    return None
+                cust["category"] = ca or ""
+            return None if cust and not lenient else cust
+
+        def diag_one(domain: str, item: dict[str, Any], lenient: bool = False) -> bool:
             plat = item.get("platform")
-            if domain == "sensor" and plat == "wifi_signal" and exact(item, {
-                    "platform": "wifi_signal", "name": T("WLAN-Signal"), "update_interval": "60s",
-                    "entity_category": "diagnostic"}):
-                diag["wifi_signal"] = True
+            found: dict[str, bool] = {}
+            cust: dict[str, dict[str, Any]] = {}
+
+            def done() -> bool:
+                diag.update(found)
+                custom.update({k: v for k, v in cust.items() if v})
                 return True
-            if domain == "sensor" and plat == "uptime" and exact(item, {
-                    "platform": "uptime", "name": T("Laufzeit"), "entity_category": "diagnostic"}):
-                diag["uptime"] = True
-                return True
-            if domain == "text_sensor" and plat == "uptime" and exact(item, {
-                    "platform": "uptime", "name": T("Betriebszeit"), "icon": "mdi:clock-start", "update_interval": "60s",
-                    "entity_category": "diagnostic",
-                    "format": uptime_format(_cur_lang())}):
-                diag["uptime_text"] = True
-                return True
+
+            if domain == "sensor" and plat == "wifi_signal" and set(item) <= {"platform", "name", "update_interval", "entity_category"}:
+                c = ent({k: v for k, v in item.items() if k not in ("platform", "update_interval")}, T("WLAN-Signal"), None,
+                        "diagnostic", lenient)
+                if c is not None and item.get("update_interval") == "60s":
+                    found["wifi_signal"], cust["wifi_signal"] = True, c
+                    return done()
+                return False
+            if domain == "sensor" and plat == "uptime" and set(item) <= {"platform", "name", "entity_category"}:
+                c = ent({k: v for k, v in item.items() if k != "platform"}, T("Laufzeit"), None, "diagnostic", lenient)
+                if c is not None:
+                    found["uptime"], cust["uptime"] = True, c
+                    return done()
+                return False
+            if domain == "text_sensor" and plat == "uptime" and set(item) <= {
+                    "platform", "name", "icon", "update_interval", "entity_category", "format"}:
+                c = ent({k: v for k, v in item.items() if k not in ("platform", "update_interval", "format")},
+                        T("Betriebszeit"), "mdi:clock-start", "diagnostic", lenient)
+                fmt = item.get("format")
+                if c is None or item.get("update_interval") != "60s" or not isinstance(fmt, dict):
+                    return False
+                if fmt != uptime_format(_cur_lang()):
+                    if (not lenient or not fmt or set(fmt) - {"separator", "days", "hours", "minutes", "seconds"}
+                            or not all(isinstance(v, str) for v in fmt.values())):
+                        return False
+                    c = {**c, "format": dict(fmt)}
+                found["uptime_text"], cust["uptime_text"] = True, c
+                return done()
             if domain == "text_sensor" and plat == "wifi_info":
-                found = {}
                 for flag, (conf, label, icon) in wifi_info_map().items():
                     if conf in item:
-                        if item[conf] != {"name": label, "icon": icon, "entity_category": "diagnostic"}:
+                        c = ent(item[conf], label, icon, "diagnostic", lenient)
+                        if c is None:
                             return False
-                        found[flag] = True
-                if set(item) - {"platform"} - {c for c, _, _ in wifi_info_map().values()} or not found:
+                        found[flag], cust[flag] = True, c
+                if set(item) - {"platform"} - {c_ for c_, _, _ in wifi_info_map().values()} or not found:
                     return False
-                diag.update(found)
-                return True
-            if domain == "binary_sensor" and plat == "status" and exact(item, {
-                    "platform": "status", "name": "Status", "entity_category": "diagnostic"}):
-                diag["status"] = True
-                return True
-            if domain == "button" and plat == "restart" and exact(item, {
-                    "platform": "restart", "name": T("Neustart"), "entity_category": "config"}):
-                diag["restart"] = True
-                return True
-            if domain == "sensor" and plat == "debug":
-                allowed = {"platform", "free", "block", "loop_time"}
-                if set(item) <= allowed:
-                    heap = {"free": {"name": T("Freier Heap"), "entity_category": "diagnostic"},
-                            "block": {"name": T("Größter Heap-Block"), "entity_category": "diagnostic"}}
-                    loop = {"loop_time": {"name": T("Loop-Zeit"), "entity_category": "diagnostic"}}
-                    got = {k: v for k, v in item.items() if k != "platform"}
-                    if got and all({**heap, **loop}.get(k) == v for k, v in got.items()):
-                        if "free" in got or "block" in got:
-                            if set(got) & {"free", "block"} != {"free", "block"}:
-                                return False
-                            diag["debug_heap"] = True
-                        if "loop_time" in got:
-                            diag["debug_loop"] = True
-                        return True
+                return done()
+            if domain == "binary_sensor" and plat == "status" and set(item) <= {"platform", "name", "entity_category"}:
+                c = ent({k: v for k, v in item.items() if k != "platform"}, "Status", None, "diagnostic", lenient)
+                if c is not None:
+                    found["status"], cust["status"] = True, c
+                    return done()
                 return False
-            if domain == "text_sensor" and plat == "debug" and exact(item, {
-                    "platform": "debug", "reset_reason": {"name": T("Reset-Grund"), "entity_category": "diagnostic"}}):
-                diag["debug_reset"] = True
-                return True
+            if domain == "button" and plat == "restart" and set(item) <= {"platform", "name", "entity_category"}:
+                c = ent({k: v for k, v in item.items() if k != "platform"}, T("Neustart"), None, "config", lenient)
+                if c is not None:
+                    found["restart"], cust["restart"] = True, c
+                    return done()
+                return False
+            if domain == "sensor" and plat == "debug":
+                got = {k: v for k, v in item.items() if k != "platform"}
+                names = {"free": T("Freier Heap"), "block": T("Größter Heap-Block"), "loop_time": T("Loop-Zeit")}
+                if got and set(got) <= set(names):
+                    if ("free" in got) != ("block" in got):
+                        return False
+                    for k, v in got.items():
+                        c = ent(v, names[k], None, "diagnostic", lenient)
+                        if c is None:
+                            return False
+                        cust["debug_loop" if k == "loop_time" else f"debug_{k}"] = c
+                    if "free" in got:
+                        found["debug_heap"] = True
+                    if "loop_time" in got:
+                        found["debug_loop"] = True
+                    return done()
+                return False
+            if domain == "text_sensor" and plat == "debug" and set(item) == {"platform", "reset_reason"}:
+                c = ent(item["reset_reason"], T("Reset-Grund"), None, "diagnostic", lenient)
+                if c is not None:
+                    found["debug_reset"], cust["debug_reset"] = True, c
+                    return done()
             return False
 
         def diag_try(domain: str, item: dict[str, Any]) -> bool:
@@ -1001,7 +1077,8 @@ class _Importer:
                 with use_lang(lg):
                     if diag_one(domain, item):
                         return True
-            return False
+            with use_lang("de"):  # sonst eigene Namen/Symbole/Format übernehmen
+                return diag_one(domain, item, lenient=True)
 
         fixed_doms = ("output", "one_wire", "light", "switch", "binary_sensor", "sensor", "text_sensor", "button")
         cat_doms = sorted({d for (d, _pl) in self._cat_index()
@@ -1050,7 +1127,9 @@ class _Importer:
                         self.note(f"{self.describe(domain, item)} wurde als Katalog-Baustein übernommen.")
                     except Unmapped as exc2:
                         keep.setdefault(domain, []).append(item)
-                        why = str(exc) if str(exc2) == "nicht im Katalog" else str(exc2)
+                        generic = str(exc2) == "nicht im Katalog" or str(exc2).startswith("braucht weitere Bausteine")
+                        why = str(exc) if generic and str(exc) != "nicht abbildbar" else (
+                            str(exc) if str(exc2) == "nicht im Katalog" else str(exc2))
                         self.unmapped.append(f"{self.describe(domain, item)} – {why}")
         # Ausgänge / 1-Wire, die verbraucht wurden, nicht weitergeben
         for dom, used in (("output", consumed_outputs), ("one_wire", consumed_buses)):
