@@ -295,6 +295,7 @@ class Ctx:
         self.use_secrets = bool(project.get("use_secrets", True))
         self.friendly = str(project.get("friendly_name") or "").strip()
         self.name_none_count = 0
+        self.boot_actions: list[Any] = []
 
     # --- Meldungen ---
     def warn(self, msg: str) -> None:
@@ -645,6 +646,23 @@ def e_binary_sensor(ctx: Ctx, c: dict[str, Any]) -> None:
     if target:
         domain = "switch" if target["type"] == "switch" else "light"
         d["on_press"] = [{f"{domain}.toggle": ctx.cid(target)}]
+    follow = ctx.uid_map.get(str(_opt(c, "follow_target") or ""))
+    if _opt(c, "follow_target") and not follow:
+        ctx.err(f"„{c['name']}“: das Ziel, das dem Kontakt folgt, gibt es nicht mehr.")
+    if follow and target:
+        ctx.err(f"„{c['name']}“: „Schaltet bei Druck um“ und „folgt dem Kontakt“ gleichzeitig geht nicht. Eines davon leeren.")
+    elif follow:
+        domain = "switch" if follow["type"] == "switch" else "light"
+        closed, opened = (("turn_off", "turn_on") if (_opt(c, "follow_mode") or "off_closed") == "off_closed"
+                          else ("turn_on", "turn_off"))
+        tid = ctx.cid(follow)
+        d["id"] = ctx.cid(c)
+        d["on_press"] = [{f"{domain}.{closed}": tid}]
+        d["on_release"] = [{f"{domain}.{opened}": tid}]
+        if _opt(c, "follow_boot"):
+            ctx.boot_actions.append({"if": {"condition": {"binary_sensor.is_on": d["id"]},
+                                            "then": [{f"{domain}.{closed}": tid}],
+                                            "else": [{f"{domain}.{opened}": tid}]}})
     ctx.add("binary_sensor", d)
 
 
@@ -1319,6 +1337,8 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
         esphome_block["friendly_name"] = friendly
     if comment:
         esphome_block["comment"] = Raw("${device_description}") if use_subst else comment
+    if ctx.boot_actions:
+        esphome_block["on_boot"] = {"priority": -100, "then": [{"delay": "300ms"}, *ctx.boot_actions]}
     out["esphome"] = esphome_block
     plat_name = board["platform"]
     if plat_name == "esp8266":

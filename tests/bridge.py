@@ -26,7 +26,7 @@ elif t == "catalog":
 elif t == "board":
     res = {"board": i18n.tr_struct(boards.board_detail(msg["key"]), lang)}
 elif t == "import":
-    res = importlib.import_module("esphome_studio.importer").import_yaml(msg["yaml"], msg.get("secrets", ""), lang)
+    res = importlib.import_module("esphome_studio.importer").import_yaml(msg["yaml"], msg.get("secrets", ""), lang, bool(msg.get("normalize")))
 elif t == "list":
     res = {"projects": [{"id": k, "name": v["name"], "friendly_name": v.get("friendly_name", ""), "board": v["board"]}
                         for k, v in state["projects"].items()], "secrets": state["secrets"]}

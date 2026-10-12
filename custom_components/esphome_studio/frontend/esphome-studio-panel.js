@@ -779,8 +779,13 @@ class ESPHomeStudioPanel extends HTMLElement {
       value: this._importSecrets || "", onInput: (e) => { this._importSecrets = e.target.value; } });
     const src = this._sourceBox();
     const store = this._storeBox();
+    const norm = h("label", { class: "check" },
+      h("input", { type: "checkbox", checked: this._importNormalize !== false,
+        onChange: (e) => { this._importNormalize = e.target.checked; } }),
+      h("span", {}, "Namen der Diagnose-Entitäten und Lichteffekte auf den Studio-Standard vereinheitlichen",
+        h("small", {}, "z. B. „Reboot“ wird „Neustart“. In Home Assistant ändern sich dadurch die Entity-IDs. Ohne Haken bleiben deine Namen.")));
     if (this.simple) {
-      return h("div", { class: "card" }, h("h2", {}, "Bestehende YAML importieren"), src, store,
+      return h("div", { class: "card" }, h("h2", {}, "Bestehende YAML importieren"), src, store, norm,
         h("div", { class: "row", style: "margin-top:10px" }, h("button", { onClick: () => { this._importOpen = false; this._renderAll(); } }, "Abbrechen")),
         this._importError ? h("div", { class: "msg err" }, this._importError) : null);
     }
@@ -789,6 +794,7 @@ class ESPHomeStudioPanel extends HTMLElement {
         "Alles andere (Skripte, Lambdas, Display, eigene Sensoren) bleibt unverändert im „Zusatz-YAML“. Kommentare gehen verloren."),
       this._field("ESPHome-YAML", yaml),
       this._field("secrets.yaml (optional)", sec, "Damit werden !secret-Werte (WLAN, API-Schlüssel, Passwörter) aufgelöst. Ohne sie bleiben Schlüssel leer."),
+      norm,
       h("div", { class: "row", style: "margin-top:10px" },
         h("button", { class: "primary", onClick: () => this._doImport() }, "Importieren"),
         h("button", { onClick: () => { this._importOpen = false; this._renderAll(); } }, "Abbrechen")),
@@ -915,7 +921,7 @@ class ESPHomeStudioPanel extends HTMLElement {
     if (!(this._importText || "").trim()) { this._importError = "Bitte zuerst die YAML einfügen."; this._renderAll(); return; }
     let res;
     try {
-      res = await this._ws("import", { yaml: this._importText, secrets: this._importSecrets || "" });
+      res = await this._ws("import", { yaml: this._importText, secrets: this._importSecrets || "", normalize: this._importNormalize !== false });
     } catch (err) {
       this._importError = `Import fehlgeschlagen: ${err?.message || tx("Fehler")}`;
       this._renderAll();

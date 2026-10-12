@@ -425,5 +425,19 @@
  "Die secrets.yaml muss aus Zeilen „schlüssel: wert“ bestehen.": "The secrets.yaml must consist of “key: value” lines.",
  "Zu viele Einträge im Secrets-Speicher.": "Too many entries in the secrets store.",
  "restore_mode nicht abbildbar": "restore_mode cannot be mapped",
- "Standard: immer aus. „RESTORE_DEFAULT_OFF“ stellt den letzten Zustand wieder her (Standard aus).": "Default: always off. “RESTORE_DEFAULT_OFF” restores the last state (default off)."
+ "Standard: immer aus. „RESTORE_DEFAULT_OFF“ stellt den letzten Zustand wieder her (Standard aus).": "Default: always off. “RESTORE_DEFAULT_OFF” restores the last state (default off).",
+ "Die Namen der Diagnose-Entitäten und Lichteffekte wurden auf den Studio-Standard vereinheitlicht. In Home Assistant ändern sich dadurch die Entity-IDs.": "The names of the diagnostic entities and light effects were unified to the Studio standard. Entity IDs in Home Assistant change as a result.",
+ "Der Kontakt „{0}“ schaltet „{1}“ mit. Das Ziel ist nicht abbildbar; bitte on_press/on_release im Zusatz-YAML ergänzen.": "The contact “{0}” also switches “{1}”. The target cannot be mapped; please add on_press/on_release in the extra YAML.",
+ "eigene Aktion bei on_release": "custom action on on_release",
+ "eigene Aktion bei on_press/on_release": "custom action on on_press/on_release",
+ "Taster / Reed-Kontakt / Türkontakt": "Button / reed contact / door contact",
+ "Licht/Relais folgt dem Kontakt": "Light/relay follows the contact",
+ "Optional, z. B. für einen Reed-Kontakt: das Ziel schaltet mit dem Kontakt (statt bei jedem Druck umzuschalten).": "Optional, e.g. for a reed contact: the target switches with the contact (instead of toggling on every press).",
+ "Richtung (bei „folgt“)": "Direction (for “follows”)",
+ "Aus bei geschlossenem Kontakt, an bei offenem": "Off when the contact is closed, on when open",
+ "An bei geschlossenem Kontakt, aus bei offenem": "On when the contact is closed, off when open",
+ "Beim Start angleichen (bei „folgt“)": "Match at startup (for “follows”)",
+ "Nach dem Start (300 ms Wartezeit) wird das Ziel passend zum Kontakt geschaltet.": "After startup (300 ms wait) the target is switched to match the contact.",
+ "„{0}“: das Ziel, das dem Kontakt folgt, gibt es nicht mehr.": "“{0}”: the target that follows the contact no longer exists.",
+ "„{0}“: „Schaltet bei Druck um“ und „folgt dem Kontakt“ gleichzeitig geht nicht. Eines davon leeren.": "“{0}”: “Toggles on press” and “follows the contact” cannot be used together. Clear one of them."
 }

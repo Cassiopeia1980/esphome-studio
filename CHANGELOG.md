@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.0
+- Der Baustein „Taster / Reed-Kontakt / Türkontakt“ kann jetzt ein Licht/Relais dem Kontakt **folgen** lassen (aus/an bei geschlossenem Kontakt) und beim Start den Zustand angleichen (`on_boot`); der Import erkennt dieses Muster samt `delayed_on` + `delayed_off`
+- Import-Option „Namen der Diagnose-Entitäten und Lichteffekte auf den Studio-Standard vereinheitlichen“ (Standard: an), damit alle Geräte gleiche Namen bekommen; ohne Haken bleiben eigene Namen
+
 ## 0.12.1
 - Fix zu 0.12.0: `restore_mode` bei Lichtern wurde beim Import verworfen, obwohl `RESTORE_DEFAULT_OFF` nicht der ESPHome-Standard ist (der ist `ALWAYS_OFF`). Dadurch hätte das Licht nach einem Neustart seinen letzten Zustand nicht behalten
 - Lichter haben jetzt die Einstellung „Zustand nach Neustart“; der Import übernimmt den Wert

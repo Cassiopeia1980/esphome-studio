@@ -264,6 +264,7 @@ async def ws_new(hass, connection, msg):
     vol.Optional("lang"): str,
     vol.Required("yaml"): str,
     vol.Optional("secrets"): str,
+    vol.Optional("normalize"): bool,
 })
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -283,7 +284,8 @@ async def ws_import(hass, connection, msg):
         if isinstance(extra, dict):
             merged.update(extra)
             secrets_text = "".join(f"{k}: {json.dumps(v, ensure_ascii=False)}\n" for k, v in merged.items())
-    connection.send_result(msg["id"], await hass.async_add_executor_job(import_yaml, msg["yaml"], secrets_text, _lang(msg)))
+    connection.send_result(msg["id"], await hass.async_add_executor_job(import_yaml, msg["yaml"], secrets_text, _lang(msg),
+                                                                        bool(msg.get("normalize"))))
 
 
 @websocket_api.websocket_command({vol.Required("type"): "esphome_studio/generate", vol.Optional("lang"): str, vol.Required("project"): dict})

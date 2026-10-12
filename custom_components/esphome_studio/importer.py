@@ -512,7 +512,7 @@ class _Importer:
         return c
 
     def binary_sensor(self, item: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
-        _only(item, {"platform", "name", "id", "pin", "device_class", "filters", "on_press"})
+        _only(item, {"platform", "name", "id", "pin", "device_class", "filters", "on_press", "on_release"})
         pid, inv, mode = self.pin(item.get("pin"), modes=True)
         c = self.new("binary_sensor", self.text_name(item.get("name")), item, {"pin": pid})
         c["options"]["mode"] = mode or "INPUT"
@@ -526,6 +526,11 @@ class _Importer:
         f = item.get("filters")
         c["options"]["debounce_ms"] = 0
         if f is not None:
+            if (isinstance(f, list) and len(f) == 2 and all(isinstance(x, dict) and len(x) == 1 for x in f)
+                    and {next(iter(x)) for x in f} == {"delayed_on", "delayed_off"}
+                    and f[0][next(iter(f[0]))] == f[1][next(iter(f[1]))]):
+                # delayed_on + delayed_off mit gleicher Zeit ist dasselbe wie delayed_on_off
+                f = [{"delayed_on_off": f[0][next(iter(f[0]))]}]
             if not (isinstance(f, list) and len(f) == 1 and isinstance(f[0], dict) and set(f[0]) == {"delayed_on_off"}):
                 raise Unmapped("eigene Filter")
             m = re.fullmatch(r"(\d+)ms", str(f[0]["delayed_on_off"]))
@@ -534,14 +539,61 @@ class _Importer:
             c["options"]["debounce_ms"] = int(m.group(1))
         target = None
         op = item.get("on_press")
+        orl = item.get("on_release")
+
+        def one(x: Any, what: str) -> tuple[str, str]:
+            if not (isinstance(x, list) and len(x) == 1 and isinstance(x[0], dict) and len(x[0]) == 1):
+                raise Unmapped(f"eigene Aktion bei {what}")
+            (k_, v_), = x[0].items()
+            if not isinstance(v_, str):
+                raise Unmapped(f"eigene Aktion bei {what}")
+            return k_, v_
+
+        if orl is not None:
+            if op is None:
+                raise Unmapped("eigene Aktion bei on_release")
+            (k1, v1), (k2, v2) = one(op, "on_press"), one(orl, "on_release")
+            pairs = {("light.turn_off", "light.turn_on"): "off_closed", ("light.turn_on", "light.turn_off"): "on_closed",
+                     ("switch.turn_off", "switch.turn_on"): "off_closed", ("switch.turn_on", "switch.turn_off"): "on_closed"}
+            if v1 != v2 or (k1, k2) not in pairs:
+                raise Unmapped("eigene Aktion bei on_press/on_release")
+            self._follow[id(c)] = pairs[(k1, k2)]
+            return c, v1
         if op is not None:
-            if not (isinstance(op, list) and len(op) == 1 and isinstance(op[0], dict) and len(op[0]) == 1):
-                raise Unmapped("eigene Aktion bei on_press")
-            (k, v), = op[0].items()
-            if k not in ("switch.toggle", "light.toggle") or not isinstance(v, str):
+            k, v = one(op, "on_press")
+            if k not in ("switch.toggle", "light.toggle"):
                 raise Unmapped("eigene Aktion bei on_press")
             target = v
         return c, target
+
+    @staticmethod
+    def parse_boot(ob: Any) -> list[tuple[str, str, str, str]] | None:
+        """Erkennt den Studio-Startblock „Zustand zum Kontakt angleichen“, sonst None."""
+        if not (isinstance(ob, dict) and set(ob) == {"priority", "then"} and ob["priority"] == -100
+                and isinstance(ob["then"], list) and len(ob["then"]) >= 2 and ob["then"][0] == {"delay": "300ms"}):
+            return None
+        out_: list[tuple[str, str, str, str]] = []
+        for a in ob["then"][1:]:
+            if not (isinstance(a, dict) and set(a) == {"if"} and isinstance(a["if"], dict)
+                    and set(a["if"]) == {"condition", "then", "else"}):
+                return None
+            cond = a["if"]["condition"]
+            if not (isinstance(cond, dict) and len(cond) == 1 and "binary_sensor.is_on" in cond
+                    and isinstance(cond["binary_sensor.is_on"], str)):
+                return None
+            acts = []
+            for part in ("then", "else"):
+                x = a["if"][part]
+                if not (isinstance(x, list) and len(x) == 1 and isinstance(x[0], dict) and len(x[0]) == 1):
+                    return None
+                (k, v), = x[0].items()
+                if not isinstance(v, str):
+                    return None
+                acts.append((k, v))
+            if acts[0][1] != acts[1][1]:
+                return None
+            out_.append((cond["binary_sensor.is_on"], acts[0][1], acts[0][0], acts[1][0]))
+        return out_
 
     def sensor(self, item: dict[str, Any]) -> dict[str, Any]:
         plat = item.get("platform")
@@ -765,6 +817,12 @@ class _Importer:
             p["comment"] = str(self.val(raw_c) or "")
             if p["substitutions"] and str(raw_c) not in ("${device_description}", "$device_description"):
                 p["substitutions"] = bool(p["substitutions"])
+        self._boot = None
+        self._boot_raw = None
+        if "on_boot" in es:
+            parsed = self.parse_boot(es["on_boot"])
+            if parsed is not None:
+                self._boot, self._boot_raw = parsed, es.pop("on_boot")
         if es:
             self.extra_set(["esphome"], es)
         if self.subs:
@@ -965,6 +1023,7 @@ class _Importer:
         p = self.p
         outs = self.collect_outputs()
         self.consume_bus = None
+        self._follow: dict[int, str] = {}
         consumed_outputs: set[str] = set()
         consumed_buses: set[str] = set()
         comps: list[dict[str, Any]] = []
@@ -1160,11 +1219,40 @@ class _Importer:
                                   "light_strip")}
         for c, tgt in targets:
             t = by_id.get(tgt)
-            if t is not None:
+            follow = self._follow.get(id(c))
+            if t is not None and follow:
+                c["options"].update(follow_target=t["uid"], follow_mode=follow, follow_boot=False)
+            elif t is not None:
                 c["options"]["toggle_target"] = t["uid"]
+            elif follow:
+                self.note(f"Der Kontakt „{c['name']}“ schaltet „{tgt}“ mit. Das Ziel ist nicht abbildbar; "
+                          "bitte on_press/on_release im Zusatz-YAML ergänzen.")
             else:
                 self.note(f"Der Taster „{c['name']}“ schaltet „{tgt}“ um. Das Ziel ist nicht abbildbar; "
                           "bitte das Umschalten im Zusatz-YAML ergänzen.")
+        if getattr(self, "_boot", None):
+            by_bs = {(c.get("id") or slug(c["name"])): c for c in comps
+                     if c["type"] == "binary_sensor" and c["options"].get("follow_target")}
+            marks = []
+            for bsid, tid, then_k, else_k in self._boot:
+                c = by_bs.get(bsid)
+                if c is None:
+                    marks = None
+                    break
+                dom = then_k.split(".")[0]
+                closed, opened = (("turn_off", "turn_on") if c["options"].get("follow_mode") == "off_closed"
+                                  else ("turn_on", "turn_off"))
+                t = by_id.get(tid)
+                if t is None or t["uid"] != c["options"]["follow_target"] or then_k != f"{dom}.{closed}" \
+                        or else_k != f"{dom}.{opened}":
+                    marks = None
+                    break
+                marks.append(c)
+            if marks:
+                for c in marks:
+                    c["options"]["follow_boot"] = True
+            else:
+                self.extra_set(["esphome", "on_boot"], self._boot_raw)
         # Komponenten, die eine ID brauchen, behalten ihre ursprüngliche ID
         for c in comps:
             if c.get("id") and c["id"] == slug(c["name"]):
@@ -1232,11 +1320,21 @@ class _Importer:
         p["components"] = comps
 
 
-def import_yaml(text: str, secrets_text: str = "", lang: str = "de") -> dict[str, Any]:
+def import_yaml(text: str, secrets_text: str = "", lang: str = "de", normalize: bool = False) -> dict[str, Any]:
     """Liest eine ESPHome-YAML und liefert ``{ok, project, notes, unmapped, secrets, errors}``."""
     with use_lang(lang):
         try:
             res = _Importer(text, secrets_text).run()
+            if normalize and res.get("ok") and res.get("project"):
+                proj = res["project"]
+                changed = bool(proj.get("diag_custom"))
+                proj["diag_custom"] = {}
+                for comp in proj.get("components", []):
+                    if comp.get("options", {}).pop("fx_names", None):
+                        changed = True
+                if changed:
+                    res["notes"].append("Die Namen der Diagnose-Entitäten und Lichteffekte wurden auf den Studio-Standard "
+                                        "vereinheitlicht. In Home Assistant ändern sich dadurch die Entity-IDs.")
         except Unmapped as exc:  # pragma: no cover - sollte intern abgefangen sein
             res = {"ok": False, "project": None, "notes": [], "unmapped": [], "secrets": {}, "errors": [str(exc)]}
         except Exception as exc:  # noqa: BLE001 - beliebige Benutzer-YAML darf nie abstürzen

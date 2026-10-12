@@ -222,3 +222,40 @@ def test_standard_diag_roundtrip_unchanged():
     r, res = roundtrip(p)
     assert res["project"]["diag"]["uptime_text"] and res["project"]["diag"]["ip"]
     assert not res["project"].get("diag_custom")
+
+
+ACE_SECRETS = 'ota: "x1234567890"\nwifi_ssid: "Heim"\nwifi_password: "passwort123"\nap_password: "apapapap1234"\n'
+
+
+def test_reed_contact_follow_pattern_roundtrip():
+    """Reed-Kontakt mit on_press/on_release und on_boot wird vollständig als Baustein erkannt und exakt wieder erzeugt."""
+    res = imp.import_yaml((SAMPLES / "acepro1.yaml").read_text(), ACE_SECRETS)
+    assert res["ok"], res["errors"]
+    assert res["unmapped"] == []
+    bs = [c for c in res["project"]["components"] if c["type"] == "binary_sensor"][0]
+    assert bs["options"]["follow_mode"] == "off_closed" and bs["options"]["follow_boot"] is True
+    assert bs["options"]["debounce_ms"] == 50
+    y = gen.generate(res["project"], STORED)["yaml"]
+    assert "light.turn_off: lampe" in y and "light.turn_on: lampe" in y
+    assert "binary_sensor.is_on: reed" in y and "priority: -100" in y and "delay: 300ms" in y
+    assert "delayed_on_off: 50ms" in y
+    assert "on_boot" not in (res["project"]["extra_yaml"] or "")
+
+
+def test_unknown_on_boot_stays_in_extra_yaml():
+    t = (SAMPLES / "acepro1.yaml").read_text().replace("delay: 300ms", "delay: 1s")
+    res = imp.import_yaml(t, ACE_SECRETS)
+    assert res["ok"]
+    bs = [c for c in res["project"]["components"] if c["type"] == "binary_sensor"][0]
+    assert bs["options"]["follow_boot"] is False
+    assert "on_boot" in res["project"]["extra_yaml"] and "delay: 1s" in res["project"]["extra_yaml"]
+
+
+def test_normalize_unifies_diag_names():
+    own = imp.import_yaml((SAMPLES / "aquarium_fx.yaml").read_text(), AQ_SECRETS)
+    assert own["project"]["diag_custom"]
+    norm = imp.import_yaml((SAMPLES / "aquarium_fx.yaml").read_text(), AQ_SECRETS, "de", True)
+    assert norm["project"]["diag_custom"] == {}
+    y = gen.generate(norm["project"], STORED)["yaml"]
+    assert "name: Neustart" in y and "name: Reboot" not in y and "Strobe Effect" not in y
+    assert any("vereinheitlicht" in n for n in norm["notes"])

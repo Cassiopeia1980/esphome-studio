@@ -133,7 +133,7 @@ COMPONENTS: dict[str, dict[str, Any]] = {
     },
     # ------------------------------------------------------------ Eingänge ---
     "binary_sensor": {
-        "label": "Taster / Schalter / Kontakt", "group": GROUP_IN, "platforms": ALL, "icon": "mdi:gesture-tap-button",
+        "label": "Taster / Reed-Kontakt / Türkontakt", "group": GROUP_IN, "platforms": ALL, "icon": "mdi:gesture-tap-button",
         "pins": [_pin("pin", "Pin", "in")],
         "options": [
             _select("mode", "Eingangsmodus", ["INPUT_PULLUP", "INPUT", "INPUT_PULLDOWN"], "INPUT_PULLUP",
@@ -147,6 +147,15 @@ COMPONENTS: dict[str, dict[str, Any]] = {
              "ref_types": ["switch", "light_binary", "light_pwm", "light_rgb", "light_rgbw", "light_rgbww",
                            "light_strip"],
              "default": "", "help": "Optional: Taster schaltet direkt ein Relais/Licht auf diesem Gerät um."},
+            {"key": "follow_target", "label": "Licht/Relais folgt dem Kontakt", "type": "ref",
+             "ref_types": ["switch", "light_binary", "light_pwm", "light_rgb", "light_rgbw", "light_rgbww",
+                           "light_strip"],
+             "default": "", "help": "Optional, z. B. für einen Reed-Kontakt: das Ziel schaltet mit dem Kontakt (statt bei jedem Druck umzuschalten)."},
+            _select("follow_mode", "Richtung (bei „folgt“)",
+                    [["off_closed", "Aus bei geschlossenem Kontakt, an bei offenem"],
+                     ["on_closed", "An bei geschlossenem Kontakt, aus bei offenem"]], "off_closed"),
+            _bool("follow_boot", "Beim Start angleichen (bei „folgt“)", True,
+                  "Nach dem Start (300 ms Wartezeit) wird das Ziel passend zum Kontakt geschaltet."),
         ],
     },
     "ir_receiver": {
