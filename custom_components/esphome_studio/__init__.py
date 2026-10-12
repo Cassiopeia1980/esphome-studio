@@ -31,7 +31,8 @@ from .const import (
     VERSION,
 )
 from .generator import default_project, generate, new_ap_password, new_api_key, new_password
-from .deploy import DEFAULT_DIR, DeployError, version_tuple, write_to_dashboard, write_to_folder
+from .deploy import (DEFAULT_DIR, DeployError, list_from_dashboard, list_from_folder, read_from_dashboard,
+                     read_from_folder, read_secrets_from_folder, version_tuple, write_to_dashboard, write_to_folder)
 from .i18n import LANGS, tr, tr_struct, ui_dictionary, use_lang
 from .importer import import_yaml
 
@@ -59,7 +60,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not hass.data.get(WS_REGISTERED):
         for handler in (ws_meta, ws_board, ws_catalog, ws_import, ws_list, ws_get, ws_save, ws_delete, ws_new, ws_generate, ws_set_secrets,
-                        ws_random, ws_deploy_settings, ws_deploy, ws_i18n):
+                        ws_random, ws_deploy_settings, ws_deploy, ws_i18n, ws_source_list, ws_source_get):
             websocket_api.async_register_command(hass, handler)
         hass.data[WS_REGISTERED] = True
 
@@ -386,3 +387,64 @@ async def ws_deploy(hass, connection, msg):
                             "ab 2026.9. Stelle unter „WLAN, Secrets & Sicherheit“ die OTA-Absicherung auf „Passwort“, "
                             "sonst meldet ESPHome einen Fehler.", lg)
     connection.send_result(msg["id"], out)
+
+
+async def _source_call(hass, connection, msg, lg, dash_fn, folder_fn):
+    """Gemeinsame Quelle für die Lese-Befehle: Dashboard hat Vorrang, sonst der Ordner (wie beim Speichern)."""
+    st = _state(hass, connection, msg["id"], lg)
+    if not st:
+        return None
+    cfg = _settings(st)
+    try:
+        if cfg["dashboard_url"]:
+            from homeassistant.helpers.aiohttp_client import async_get_clientsession  # noqa: PLC0415
+
+            return "dashboard", cfg["dashboard_url"], await dash_fn(async_get_clientsession(hass), cfg)
+        folder = cfg["target_dir"]
+        if not folder:
+            raise DeployError("Kein Ziel eingestellt. Ordner oder Dashboard-Adresse eintragen.")
+        if not hass.config.is_allowed_path(folder):
+            raise DeployError(f"Der Ordner „{folder}“ ist für Home Assistant nicht freigegeben "
+                              "(allowlist_external_dirs). Ordner unterhalb von /config verwenden.")
+        return "folder", folder, await hass.async_add_executor_job(folder_fn, folder)
+    except DeployError as exc:
+        connection.send_error(msg["id"], "source_failed", tr(str(exc), lg))
+    except (OSError, UnicodeDecodeError) as exc:
+        connection.send_error(msg["id"], "source_failed", tr(f"Lesen fehlgeschlagen: {getattr(exc, 'strerror', None) or exc}", lg))
+    return None
+
+
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/source_list", vol.Optional("lang"): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_source_list(hass, connection, msg):
+    """Vorhandene Geräte-YAMLs aus Device Builder bzw. ESPHome-Ordner auflisten."""
+    lg = _lang(msg)
+    got = await _source_call(
+        hass, connection, msg, lg,
+        lambda sess, c: list_from_dashboard(sess, c["dashboard_url"], c["dashboard_user"], c["dashboard_password"]),
+        list_from_folder)
+    if got:
+        connection.send_result(msg["id"], {"source": got[0], "where": got[1], "items": got[2]})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/source_get", vol.Optional("lang"): str,
+                                  vol.Required("configuration"): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_source_get(hass, connection, msg):
+    """Eine YAML laden (plus im Ordner-Modus die darin benutzten Secrets)."""
+    lg = _lang(msg)
+    conf = msg["configuration"]
+
+    def folder_fn(folder):
+        text = read_from_folder(folder, conf)
+        return {"yaml": text, "secrets": read_secrets_from_folder(folder, text)}
+
+    async def dash_fn(sess, c):
+        return {"yaml": await read_from_dashboard(sess, c["dashboard_url"], conf, c["dashboard_user"], c["dashboard_password"]),
+                "secrets": ""}
+
+    got = await _source_call(hass, connection, msg, lg, dash_fn, folder_fn)
+    if got:
+        connection.send_result(msg["id"], {"source": got[0], **got[2]})

@@ -34,6 +34,7 @@ The panel appears in the Home Assistant sidebar (administrators only). The panel
 - **Export / import:** save a project as a file (without keys and passwords; new ones are generated on load) and load it again.
 - **Save to ESPHome:** write the YAML directly into your ESPHome folder or into the ESPHome Device Builder (with
   login). Existing files are backed up as `.bak`; secrets are only added, never overwritten.
+- **Load from ESPHome:** in the "Projects" card this button lists the devices from the same target (Device Builder or folder). Pick one and Studio imports the YAML so you can regenerate it in the current style. The Device Builder does not reveal secret values (add Wi-Fi/keys if needed); in folder mode the secrets the YAML uses are read from `secrets.yaml`. Comments in the original are lost on import; the original file stays untouched.
 - **Checks:** duplicate pins, duplicate names, invalid device names, missing pull-ups, ADC pins and more are reported
   live; copying and downloading are blocked while there are errors.
 

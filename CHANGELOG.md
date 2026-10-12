@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0
+- Neu: **„Aus ESPHome laden“** – bestehende Geräte-YAMLs direkt aus dem ESPHome Device Builder (oder dem ESPHome-Ordner) wählen und ins Studio importieren, um sie auf den aktuellen Stand zu bringen; kein Kopieren mehr nötig
+- Neue Websocket-Befehle `source_list` und `source_get`; im Ordner-Modus werden nur die von der YAML benutzten Secrets übernommen
+
 ## 0.9.1
 - Katalog-Generator ist jetzt deterministisch (gleiche ESPHome-Version ergibt immer dieselbe catalog.json), der monatliche Update-Pull-Request erscheint nur noch bei echten Änderungen
 

@@ -47,6 +47,12 @@ elif t == "set_secrets":
     state["secrets"].update(msg["secrets"]); res = {"secrets": state["secrets"]}
 elif t == "random":
     res = {"value": {"api": gen.new_api_key, "ota": gen.new_password, "ap": gen.new_ap_password}[msg["kind"]]()}
+elif t == "source_list":
+    res = {"source": "folder", "where": "/config/esphome", "items": [
+        {"configuration": "kueche.yaml", "name": "kueche", "friendly_name": "", "platform": ""}]}
+elif t == "source_get":
+    res = {"source": "folder", "yaml": "esphome:\n  name: kueche\nesp32:\n  board: esp32dev\nwifi:\n  ssid: !secret wifi_ssid\n",
+           "secrets": "wifi_ssid: \"Heim\"\n"}
 elif t == "i18n":
     res = {"dict": i18n.ui_dictionary(lang)}
 else:

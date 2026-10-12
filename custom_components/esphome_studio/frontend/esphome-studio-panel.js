@@ -603,7 +603,7 @@ class ESPHomeStudioPanel extends HTMLElement {
       this._left.append(h("div", { class: "card" }, this.fatal));
       return;
     }
-    this._left.append(...[this._secWizard(), this._secProject(), this._importOpen && !this.simple ? this._secImport() : null, this._importReport ? this._secReport() : null,
+    this._left.append(...[this._secWizard(), this._secProject(), this._importOpen ? this._secImport() : null, this._importReport ? this._secReport() : null,
       this._secDevice(), this._secNetwork(), this.simple ? null : this._secPins(), this._secComponents(), this._secNext()].filter(Boolean));
     this._renderOutput();
     this.scrollTop = scroll;
@@ -763,6 +763,8 @@ class ESPHomeStudioPanel extends HTMLElement {
         h("button", { title: "Projekt aus einer Datei laden", onClick: () => this._projFile.click() }, "Aus Datei laden"),
         this._projFile = h("input", { type: "file", accept: ".json,application/json", style: "display:none",
           onChange: (e) => { this._importProjectFile(e.target.files[0]); e.target.value = ""; } }),
+        h("button", { title: "Bestehende Geräte-YAML aus dem ESPHome Device Builder oder Ordner laden und auf den aktuellen Stand bringen",
+          onClick: () => { this._importOpen = true; this._renderAll(); this._loadSourceList(); } }, "Aus ESPHome laden"),
         this.simple ? null : h("button", { onClick: () => { this._importOpen = !this._importOpen; this._renderAll(); } }, "YAML importieren"),
         h("span", { class: "spacer" }),
         h("button", { class: "danger", onClick: () => this._delete() }, "Löschen")),
@@ -775,7 +777,13 @@ class ESPHomeStudioPanel extends HTMLElement {
       value: this._importText || "", onInput: (e) => { this._importText = e.target.value; } });
     const sec = h("textarea", { class: "mono", rows: "4", placeholder: "wifi_ssid: \"…\"\nwifi_password: \"…\"\napi_key: …",
       value: this._importSecrets || "", onInput: (e) => { this._importSecrets = e.target.value; } });
-    return h("div", { class: "card" }, h("h2", {}, "Bestehende YAML importieren"),
+    const src = this._sourceBox();
+    if (this.simple) {
+      return h("div", { class: "card" }, h("h2", {}, "Bestehende YAML importieren"), src,
+        h("div", { class: "row", style: "margin-top:10px" }, h("button", { onClick: () => { this._importOpen = false; this._renderAll(); } }, "Abbrechen")),
+        this._importError ? h("div", { class: "msg err" }, this._importError) : null);
+    }
+    return h("div", { class: "card" }, h("h2", {}, "Bestehende YAML importieren"), src,
       h("p", { class: "hint" }, "Das Studio übernimmt Gerät, WLAN, Sicherheit und alles, was es selbst erzeugen kann (Schalter, Lichter, Taster, Sensoren …). " +
         "Alles andere (Skripte, Lambdas, Display, eigene Sensoren) bleibt unverändert im „Zusatz-YAML“. Kommentare gehen verloren."),
       this._field("ESPHome-YAML", yaml),
@@ -784,6 +792,52 @@ class ESPHomeStudioPanel extends HTMLElement {
         h("button", { class: "primary", onClick: () => this._doImport() }, "Importieren"),
         h("button", { onClick: () => { this._importOpen = false; this._renderAll(); } }, "Abbrechen")),
       this._importError ? h("div", { class: "msg err" }, this._importError) : null);
+  }
+
+  _sourceBox() {
+    const L = this._srcList;
+    const body = [];
+    if (this._srcBusy) body.push(h("p", { class: "hint" }, "Lade …"));
+    else if (L && L.items.length) {
+      const sel = h("select", { onChange: (e) => { this._srcPick = e.target.value; } },
+        ...L.items.map((d) => h("option", { value: d.configuration, selected: d.configuration === (this._srcPick || L.items[0].configuration) },
+          d.friendly_name ? `${d.friendly_name} · ${d.configuration}` : d.configuration)));
+      body.push(h("div", { class: "row grow" }, sel,
+        h("button", { class: "primary", onClick: () => this._loadSource(this._srcPick || L.items[0].configuration) }, "Laden und importieren")),
+        h("p", { class: "hint" }, L.source === "dashboard"
+          ? "Quelle: ESPHome Device Builder. Die Werte der Secrets verrät der Device Builder nicht; WLAN und Schlüssel müssen ggf. ergänzt werden."
+          : "Quelle: ESPHome-Ordner. Benutzte Secrets werden aus der secrets.yaml mit übernommen."));
+    } else if (L) body.push(h("p", { class: "hint" }, "Keine Geräte-YAMLs gefunden."));
+    if (this._srcError) body.push(h("div", { class: "msg err" }, this._srcError));
+    body.push(h("button", { onClick: () => this._loadSourceList() }, "Liste aktualisieren"));
+    return h("div", { class: "field" }, h("label", {}, "Aus ESPHome laden"), ...body);
+  }
+
+  async _loadSourceList() {
+    this._srcBusy = true; this._srcError = ""; this._renderAll();
+    try {
+      this._srcList = await this._ws("source_list");
+      this._srcPick = this._srcList.items[0]?.configuration || "";
+    } catch (err) {
+      this._srcList = null;
+      this._srcError = err?.message || tx("Fehler");
+    }
+    this._srcBusy = false; this._renderAll();
+  }
+
+  async _loadSource(configuration) {
+    this._srcError = ""; this._srcBusy = true; this._renderAll();
+    try {
+      const r = await this._ws("source_get", { configuration });
+      this._importText = r.yaml || "";
+      this._importSecrets = r.secrets || "";
+    } catch (err) {
+      this._srcError = err?.message || tx("Fehler");
+      this._srcBusy = false; this._renderAll();
+      return;
+    }
+    this._srcBusy = false;
+    await this._doImport();
   }
 
   async _doImport() {

@@ -115,3 +115,67 @@ async def test_password_is_never_returned(setup, hass):  # noqa: F811
 def test_version_tuple():
     assert dp.version_tuple("2026.8.2") == (2026, 8) and dp.version_tuple("2026.9.1") == (2026, 9)
     assert dp.version_tuple("") > (2026, 9)  # unbekannt -> keine Warnung
+
+
+async def test_dashboard_list_and_read(aiohttp_server, socket_enabled):
+    import aiohttp  # noqa: PLC0415
+    from aiohttp import web  # noqa: PLC0415
+
+    async def ws_handler(request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+        await ws.send_json({"esphome_version": "2026.9.0", "requires_auth": False})
+        async for m in ws:
+            msg = m.json()
+            if msg["command"] == "devices/list":
+                res = {"configured": [{"name": "b", "friendly_name": "B", "configuration": "b.yaml", "target_platform": "ESP32"},
+                                      {"name": "a", "configuration": "a.yaml"},
+                                      {"name": "evil", "configuration": "../x.yaml"}], "importable": []}
+            elif msg["command"] == "devices/get_config":
+                res = "esphome:\n  name: " + msg["args"]["configuration"]
+            else:
+                res = {}
+            await ws.send_json({"message_id": msg["message_id"], "result": res})
+        return ws
+
+    app = web.Application()
+    app.router.add_get("/ws", ws_handler)
+    server = await aiohttp_server(app)
+    url = f"http://127.0.0.1:{server.port}"
+    async with aiohttp.ClientSession() as s:
+        items = await dp.list_from_dashboard(s, url)
+        assert [i["configuration"] for i in items] == ["a.yaml", "b.yaml"] and items[1]["friendly_name"] == "B"
+        assert "a.yaml" in await dp.read_from_dashboard(s, url, "a.yaml")
+        for bad in ("../a.yaml", "secrets.yaml", "a.txt", ""):
+            with pytest.raises(dp.DeployError):
+                await dp.read_from_dashboard(s, url, bad)
+
+
+def test_folder_list_read_and_secrets(tmp_path):
+    (tmp_path / "a.yaml").write_text("wifi:\n  ssid: !secret wifi_ssid\n")
+    (tmp_path / "secrets.yaml").write_text('wifi_ssid: "Heim"\nandere: "geheim"\n')
+    (tmp_path / ".hidden.yaml").write_text("x")
+    items = dp.list_from_folder(str(tmp_path))
+    assert [i["configuration"] for i in items] == ["a.yaml"]
+    text = dp.read_from_folder(str(tmp_path), "a.yaml")
+    sec = dp.read_secrets_from_folder(str(tmp_path), text)
+    assert "Heim" in sec and "geheim" not in sec
+    for bad in ("../a.yaml", "secrets.yaml", "nope.yaml"):
+        with pytest.raises(dp.DeployError):
+            dp.read_from_folder(str(tmp_path), bad)
+
+
+async def test_ws_source(setup, hass, tmp_path):  # noqa: F811
+    _entry, ws = setup
+    hass.config.allowlist_external_dirs.add(str(tmp_path))
+    (tmp_path / "kueche.yaml").write_text("esphome:\n  name: kueche\nesp32:\n  board: esp32dev\n")
+    await call(ws, "deploy_settings", target_dir=str(tmp_path))
+    r = await call(ws, "source_list")
+    assert r["success"] and r["result"]["source"] == "folder" and r["result"]["items"][0]["configuration"] == "kueche.yaml"
+    r = await call(ws, "source_get", configuration="kueche.yaml")
+    assert r["success"] and "kueche" in r["result"]["yaml"]
+    r = await call(ws, "source_get", configuration="../etc/passwd")
+    assert not r["success"] and r["error"]["code"] == "source_failed"
+    await call(ws, "deploy_settings", target_dir="/etc")
+    r = await call(ws, "source_list")
+    assert not r["success"] and r["error"]["code"] == "source_failed"

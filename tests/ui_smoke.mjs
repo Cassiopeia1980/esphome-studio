@@ -204,6 +204,18 @@ check("Debug-Intervall-Feld erscheint", !!([...card("WLAN").querySelectorAll("in
   check("Kein Fehler nach Import", ![...root.querySelectorAll(".msg.err")].length, [...root.querySelectorAll(".msg.err")].map((m) => m.textContent).join("|"));
 }
 
+// --- Aus ESPHome laden ---
+{
+  button(card("Projekte"), "Aus ESPHome laden").click();
+  await sleep(300);
+  const imp = card("Bestehende YAML");
+  check("Quellen-Liste erscheint", !!imp && !!imp.querySelector("select") && imp.textContent.includes("kueche.yaml"), imp?.textContent.slice(0, 200));
+  button(imp, "Laden und importieren").click();
+  await sleep(2500);
+  check("Import aus ESPHome: Gerätename", card("Gerät").querySelector("input[type=text]").value === "kueche");
+  check("Import aus ESPHome: kein Fehler", ![...root.querySelectorAll(".msg.err")].length);
+}
+
 // --- Katalog ---
 {
   const det = () => card("Komponenten").querySelector("details");
