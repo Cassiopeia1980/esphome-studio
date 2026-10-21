@@ -284,3 +284,40 @@ def test_ap_password_per_device_when_not_shared():
     proj["wifi"]["ap_shared"] = True
     out = gen.generate(proj, {"wifi_ssid": "a", "wifi_password": "b"})
     assert out["ok"] and any("Hotspot" in w for w in out["warnings"])
+
+
+def test_restore_state_new_syntax_roundtrip():
+    # Neue Schreibweise (ESPHome ab 2026.10): alle 8 Modi gehen hin und zurück ohne Verlust
+    for mode in components.LIGHT_RESTORE_MODES:
+        proj = gen.default_project()
+        proj["name"] = "lampe"
+        proj["restore_state_syntax"] = True
+        c = gen.new_component("light_pwm", "Licht", {"pin": "GPIO5"})
+        c["options"]["restore_mode"] = mode
+        proj["components"] = [c]
+        out = gen.generate(proj, STORED)
+        assert out["ok"], (mode, out["errors"])
+        assert "restore_mode" not in out["yaml"], mode
+        if mode != "ALWAYS_OFF":
+            assert "restore_state" in out["yaml"], mode
+        res = imp.import_yaml(out["yaml"], out["secrets"])
+        assert res["ok"] and not res["unmapped"], (mode, res["unmapped"])
+        lights = [x for x in res["project"]["components"] if x["type"] == "light_pwm"]
+        assert lights and lights[0]["options"]["restore_mode"] == mode, mode
+        assert res["project"]["restore_state_syntax"] is (mode != "ALWAYS_OFF"), mode
+
+
+def test_restore_mode_stays_default_syntax():
+    proj = gen.default_project()
+    c = gen.new_component("light_pwm", "Licht", {"pin": "GPIO5"})
+    c["options"]["restore_mode"] = "RESTORE_DEFAULT_OFF"
+    proj["components"] = [c]
+    out = gen.generate(proj, STORED)
+    assert "restore_mode: RESTORE_DEFAULT_OFF" in out["yaml"] and "restore_state" not in out["yaml"]
+
+
+def test_restore_state_with_single_fields_stays_extra():
+    t = (SAMPLES / "acepro1.yaml").read_text().replace(
+        "    restore_mode: RESTORE_DEFAULT_OFF", "    restore_state:\n      state: KEEP\n      brightness: 50%")
+    res = imp.import_yaml(t, ACE_SECRETS)
+    assert res["ok"] and res["unmapped"]

@@ -60,6 +60,13 @@ FX_RANDOM = _bool("fx_random", "Effekte: Zufällig (schnell + langsam)", False)
 FX_STROBE = _bool("fx_strobe", "Effekt: Blitzen", False)
 LIGHT_RESTORE_MODES = ["ALWAYS_OFF", "RESTORE_DEFAULT_OFF", "RESTORE_DEFAULT_ON", "ALWAYS_ON", "RESTORE_INVERTED_DEFAULT_OFF",
                        "RESTORE_INVERTED_DEFAULT_ON", "RESTORE_AND_OFF", "RESTORE_AND_ON"]
+# restore_mode -> (restore_state, Kaltstart "an"): gleiches Verhalten in der neuen Schreibweise (ESPHome ab 2026.10)
+LIGHT_RESTORE_NEW = {
+    "ALWAYS_OFF": ("none", False), "ALWAYS_ON": ("none", True),
+    "RESTORE_DEFAULT_OFF": ("all", False), "RESTORE_DEFAULT_ON": ("all", True),
+    "RESTORE_INVERTED_DEFAULT_OFF": ({"state": "INVERT"}, False), "RESTORE_INVERTED_DEFAULT_ON": ({"state": "INVERT"}, True),
+    "RESTORE_AND_OFF": ({"state": False}, False), "RESTORE_AND_ON": ({"state": True}, True),
+}
 LIGHT_RESTORE = _select("restore_mode", "Zustand nach Neustart", LIGHT_RESTORE_MODES, "ALWAYS_OFF",
                         "Standard: immer aus. „RESTORE_DEFAULT_OFF“ stellt den letzten Zustand wieder her (Standard aus).")
 FREQUENCY = _num("frequency", "PWM-Frequenz", "", 1, 40000, "Hz",

@@ -1017,6 +1017,8 @@ class ESPHomeStudioPanel extends HTMLElement {
         !this.simple && b?.platform === "esp32"
           ? this._select("framework", "Framework", [["esp-idf", "ESP-IDF (empfohlen)"], ["arduino", "Arduino"]]) : null,
         this.simple ? null : this._select("log_level", "Log-Stufe", LOG_LEVELS),
+        this.simple ? null : this._check("restore_state_syntax", "Neue Schreibweise für „Zustand nach Neustart“ bei Lichtern (ESPHome ab 2026.10)",
+          "Schreibt restore_state statt restore_mode. Erst einschalten, wenn dein Device Builder ESPHome 2026.10 oder neuer hat, sonst bricht das Kompilieren ab. Die alte Schreibweise läuft in 2026.10 noch."),
         this.simple ? null : this._text("comment", "Beschreibung (comment)", { placeholder: "Aquarium im Wohnzimmer", help: "Erscheint in ESPHome und Home Assistant als Gerätebeschreibung." }),
         !this.simple && b?.platform === "esp8266"
           ? this._select("flash_mode", "Flash-Modus (ESP8266)", [["", "Standard"], ["dout", "dout"], ["dio", "dio"], ["qio", "qio"], ["qout", "qout"]], "dout hilft bei manchen Boards, die nach dem Flashen nicht starten.") : null,

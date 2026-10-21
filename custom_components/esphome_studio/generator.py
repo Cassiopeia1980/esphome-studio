@@ -22,7 +22,7 @@ from .boards import BOARDS, NO_WIFI_CHIPS, PLATFORM_LABEL, board_has_wifi
 from .entity import apply_entity
 from .catalog import entry as catalog_entry, spec_for_entry
 from .i18n import T, tr, use_lang
-from .components import ENT_META, COMPONENTS, default_options
+from .components import ENT_META, COMPONENTS, LIGHT_RESTORE_NEW, default_options
 from .yamlutil import Tag, load_text
 
 DEVICE_NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,29}[a-z0-9])?$")
@@ -230,6 +230,7 @@ def default_project(board: str = "d1_mini") -> dict[str, Any]:
         "framework": "esp-idf",
         "log_level": "INFO",
         "use_secrets": True,
+        "restore_state_syntax": False,
         "wifi": {
             "fallback_ap": True,
             "ap_shared": True,
@@ -297,6 +298,7 @@ class Ctx:
         self.friendly = str(project.get("friendly_name") or "").strip()
         self.name_none_count = 0
         self.boot_actions: list[Any] = []
+        self.restore_new = bool(project.get("restore_state_syntax"))
 
     # --- Meldungen ---
     def warn(self, msg: str) -> None:
@@ -517,7 +519,7 @@ def e_light_binary(ctx: Ctx, c: dict[str, Any]) -> None:
         ctx.add("output", {"platform": "gpio", "id": oid,
                            "pin": ctx.pin_cfg(pin, inverted=bool(_opt(c, "inverted")))})
     d: dict[str, Any] = {"platform": "binary", "name": _light_name(ctx, c), "id": ctx.cid(c), "output": oid}
-    _light_restore(c, d)
+    _light_restore(ctx, c, d)
     ctx.add("light", d)
 
 
@@ -525,7 +527,7 @@ def e_light_pwm(ctx: Ctx, c: dict[str, Any]) -> None:
     oid = _pwm_output(ctx, c, "pin")
     d: dict[str, Any] = {"platform": "monochromatic", "name": _light_name(ctx, c), "id": ctx.cid(c),
                          "output": oid or "FEHLT"}
-    _light_restore(c, d)
+    _light_restore(ctx, c, d)
     fx = _effects(c, False)
     if fx:
         d["effects"] = fx
@@ -553,10 +555,17 @@ def _effects(c: dict[str, Any], color: bool) -> list[dict[str, Any]]:
     return fx
 
 
-def _light_restore(c: dict[str, Any], d: dict[str, Any]) -> None:
+def _light_restore(ctx: Ctx, c: dict[str, Any], d: dict[str, Any]) -> None:
     rm = _opt(c, "restore_mode")
     if rm and rm != "ALWAYS_OFF":  # ALWAYS_OFF ist der ESPHome-Standard bei Lichtern
-        d["restore_mode"] = rm
+        if ctx.restore_new and rm in LIGHT_RESTORE_NEW:
+            # neue Schreibweise (ESPHome ab 2026.10): restore_state + initial_state
+            rs, on = LIGHT_RESTORE_NEW[rm]
+            d["restore_state"] = json.loads(json.dumps(rs))
+            if on:
+                d["initial_state"] = {"state": True}
+        else:
+            d["restore_mode"] = rm
 
 
 def _light_name(ctx: Ctx, c: dict[str, Any]) -> Any:
@@ -582,7 +591,7 @@ def _color_light(ctx: Ctx, c: dict[str, Any], platform: str, channels: list[tupl
                 ctx.err(f"„{c['name']}“: ungültige Farbtemperatur.")
     if platform in ("rgbw", "rgbww") and _opt(c, "color_interlock"):
         d["color_interlock"] = True
-    _light_restore(c, d)
+    _light_restore(ctx, c, d)
     fx = _effects(c, True)
     if fx:
         d["effects"] = fx

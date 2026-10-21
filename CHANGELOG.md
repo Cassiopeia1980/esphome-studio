@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.0
+- ESPHome 2026.10 ersetzt bei Lichtern `restore_mode` durch `restore_state` (das alte `restore_mode` läuft dort noch). Das Studio kann jetzt beides: die Option „Neue Schreibweise für „Zustand nach Neustart“ bei Lichtern“ im Bereich „Gerät“ schreibt `restore_state` (+ `initial_state`) mit identischem Verhalten für alle 8 Modi. **Standard bleibt aus**, weil ESPHome 2026.9 `restore_state` nicht kennt und das Kompilieren abbricht
+- Der Import liest beide Schreibweisen und schaltet die Option ein, wenn die YAML schon `restore_state` benutzt. Einzelne Felder (z. B. `brightness`) bleiben im Zusatz-YAML
+- Alle Studio-Beispiele und die drei Beispielgeräte sind gegen ESPHome 2026.10.0 geprüft
+
 ## 0.14.0
 - Neue Option „Ein Hotspot-Passwort für alle Geräte“ (Standard bei neuen Projekten): das Passwort des Fallback-Hotspots liegt wie das WLAN-Passwort einmal im Speicher von Home Assistant und steht im secrets.yaml-Block als `ap_password`. Bestehende Projekte behalten ihr Passwort pro Gerät
 - Der Import erkennt `!secret ap_password` als gemeinsames Hotspot-Passwort und übernimmt den Wert in den Speicher

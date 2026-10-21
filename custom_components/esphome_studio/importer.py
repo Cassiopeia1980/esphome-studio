@@ -14,7 +14,7 @@ from collections import Counter
 from typing import Any
 
 from . import boards as B
-from .components import COMPONENTS, LIGHT_RESTORE_MODES
+from .components import COMPONENTS, LIGHT_RESTORE_MODES, LIGHT_RESTORE_NEW
 from .catalog import catalog as _catalog
 from .i18n import T, tr, use_lang
 from .generator import _cur_lang, uptime_format, LOG_LEVELS, spec_for, PWM_PLATFORM, _effects, default_project, dump_yaml, new_component, slug
@@ -383,6 +383,46 @@ class _Importer:
                     return
         raise Unmapped("eigene Lichteffekte")
 
+    @staticmethod
+    def restore_from_new(item: dict[str, Any]) -> str:
+        """restore_state + initial_state (ESPHome ab 2026.10) -> restore_mode, nur wenn verlustfrei."""
+        rs, ini = item.get("restore_state"), item.get("initial_state")
+        if rs is None:
+            raise Unmapped("initial_state ohne restore_state nicht abbildbar")
+        if isinstance(rs, str):
+            rs = rs.strip().lower()
+        if rs in ({}, "all"):
+            key: Any = "all"
+        elif rs == "none":
+            key = "none"
+        elif isinstance(rs, dict):
+            keep = {"KEEP", "keep"}
+            others = {k: v for k, v in rs.items() if k != "state" and str(v) not in keep}
+            st = rs.get("state", "KEEP")
+            if others:
+                raise Unmapped("restore_state mit einzelnen Feldern nicht abbildbar")
+            if isinstance(st, str) and st.strip().upper() in ("ON", "OFF", "TRUE", "FALSE", "INVERT", "KEEP"):
+                st = {"ON": True, "TRUE": True, "OFF": False, "FALSE": False}.get(st.strip().upper(), st.strip().upper())
+            if st == "KEEP":
+                key = "all"
+            elif st == "INVERT" or isinstance(st, bool):
+                key = st
+            else:
+                raise Unmapped("restore_state nicht abbildbar")
+        else:
+            raise Unmapped("restore_state nicht abbildbar")
+        if ini is None:
+            on = False
+        elif isinstance(ini, dict) and set(ini) == {"state"} and isinstance(ini["state"], bool):
+            on = ini["state"]
+        else:
+            raise Unmapped("initial_state nicht abbildbar")
+        for mode, (r, o) in LIGHT_RESTORE_NEW.items():
+            rk = r["state"] if isinstance(r, dict) else r
+            if rk == key and o == on:
+                return mode
+        raise Unmapped("restore_state nicht abbildbar")
+
     def light(self, item: dict[str, Any], outs: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
         plat = item.get("platform")
         restore = None
@@ -392,6 +432,10 @@ class _Importer:
                 if restore not in LIGHT_RESTORE_MODES:
                     raise Unmapped("restore_mode nicht abbildbar")
                 item = {k: v for k, v in item.items() if k != "restore_mode"}
+            elif "restore_state" in item or "initial_state" in item:
+                restore = self.restore_from_new(item)
+                item = {k: v for k, v in item.items() if k not in ("restore_state", "initial_state")}
+                self.p["restore_state_syntax"] = True
         consumed: list[str] = []
         name_raw = item.get("name")
         name_none = (name_raw is None and "name" in item) or str(name_raw) == "None"
