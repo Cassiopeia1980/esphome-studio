@@ -230,7 +230,7 @@ def default_project(board: str = "d1_mini") -> dict[str, Any]:
         "framework": "esp-idf",
         "log_level": "INFO",
         "use_secrets": True,
-        "restore_state_syntax": False,
+        "restore_state_syntax": True,
         "wifi": {
             "fallback_ap": True,
             "ap_shared": True,

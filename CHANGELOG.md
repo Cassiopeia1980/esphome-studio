@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.1
+- Neue Projekte schreiben bei Lichtern jetzt `restore_state` (ESPHome ab 2026.10). Bestehende, gespeicherte Projekte behalten ihre Schreibweise; der Haken „Neue Schreibweise für „Zustand nach Neustart““ im Bereich „Gerät“ schaltet um. Mit ESPHome 2026.9 oder älter den Haken entfernen
+- Der Import überführt `restore_mode` aus alten YAMLs beim Neuerzeugen in die neue Schreibweise (Haken entfernen, wenn das nicht gewünscht ist)
+
 ## 0.15.0
 - ESPHome 2026.10 ersetzt bei Lichtern `restore_mode` durch `restore_state` (das alte `restore_mode` läuft dort noch). Das Studio kann jetzt beides: die Option „Neue Schreibweise für „Zustand nach Neustart“ bei Lichtern“ im Bereich „Gerät“ schreibt `restore_state` (+ `initial_state`) mit identischem Verhalten für alle 8 Modi. **Standard bleibt aus**, weil ESPHome 2026.9 `restore_state` nicht kennt und das Kompilieren abbricht
 - Der Import liest beide Schreibweisen und schaltet die Option ein, wenn die YAML schon `restore_state` benutzt. Einzelne Felder (z. B. `brightness`) bleiben im Zusatz-YAML

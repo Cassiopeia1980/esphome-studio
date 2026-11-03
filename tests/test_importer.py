@@ -204,7 +204,9 @@ def test_light_restore_mode_is_kept_and_default_is_not_emitted():
     comp = [c for c in res["project"]["components"] if c["type"] == "light_rgbw"][0]
     assert comp["options"]["restore_mode"] == "RESTORE_DEFAULT_OFF"
     out = gen.generate(res["project"], STORED)
-    assert "restore_mode: RESTORE_DEFAULT_OFF" in out["yaml"]
+    assert "restore_mode" not in out["yaml"] and "restore_state" in out["yaml"]  # neuer Standard: neue Schreibweise
+    res["project"]["restore_state_syntax"] = False
+    assert "restore_mode: RESTORE_DEFAULT_OFF" in gen.generate(res["project"], STORED)["yaml"]
     p = gen.default_project("d1_mini")
     p["components"] = [gen.new_component("light_pwm", "Lampe", {"pin": "GPIO5"})]
     assert "restore_mode" not in gen.generate(p, STORED)["yaml"]
@@ -304,11 +306,13 @@ def test_restore_state_new_syntax_roundtrip():
         assert res["ok"] and not res["unmapped"], (mode, res["unmapped"])
         lights = [x for x in res["project"]["components"] if x["type"] == "light_pwm"]
         assert lights and lights[0]["options"]["restore_mode"] == mode, mode
-        assert res["project"]["restore_state_syntax"] is (mode != "ALWAYS_OFF"), mode
+        assert res["project"]["restore_state_syntax"] is True, mode
 
 
-def test_restore_mode_stays_default_syntax():
+def test_restore_mode_old_syntax_when_switched_off():
     proj = gen.default_project()
+    assert proj["restore_state_syntax"] is True  # neue Projekte schreiben restore_state (ESPHome ab 2026.10)
+    proj["restore_state_syntax"] = False
     c = gen.new_component("light_pwm", "Licht", {"pin": "GPIO5"})
     c["options"]["restore_mode"] = "RESTORE_DEFAULT_OFF"
     proj["components"] = [c]
