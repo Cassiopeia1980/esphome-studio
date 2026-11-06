@@ -73,13 +73,19 @@ Das Panel erscheint in der Seitenleiste von Home Assistant (nur für Administrat
 4. Einstellungen → Geräte & Dienste → Integration hinzufügen → **ESPHome Studio**.
 5. In der Seitenleiste erscheint **ESPHome Studio**. Beim ersten Öffnen einmal `Strg+F5` drücken.
 
-### Installation über HACS (Repository ist vorbereitet)
+### Installation über den Marketplace (Home Assistant ab 2026.11)
 
-1. Auf GitHub ein neues Repository `esphome-studio` anlegen und den Inhalt dieses Ordners hochladen.
-2. Vorher einmal `sh tools/set_github_user.sh DEIN-GITHUB-NAME` ausführen (ersetzt `Cassiopeia1980`, setzt `codeowners`).
-3. Release erstellen: Tag `v0.6.0` pushen. Der Workflow `release.yml` hängt `esphome_studio.zip` an.
-4. In HACS: ⋮ → Benutzerdefinierte Repositories → URL einfügen, Typ **Integration**.
-5. Die Workflows `Validate` (hassfest, HACS-Prüfung, Tests) laufen bei jedem Push automatisch.
+HACS wurde in Home Assistant 2026.11 durch den eingebauten **Marketplace** ersetzt. Bereits über HACS installierte Integrationen
+bleiben erhalten und werden weiter aktualisiert (Einstellungen → Updates).
+
+1. Einstellungen → **Marketplace** → **Add from link** (Link hinzufügen).
+2. `https://github.com/Cassiopeia1980/esphome-studio` einfügen. Dafür verlangt Home Assistant einmal die GitHub-Anmeldung per Gerätecode (liest nur öffentliche Informationen).
+3. **ESPHome Studio** installieren und Home Assistant neu starten.
+4. Einstellungen → Geräte & Dienste → Integration hinzufügen → **ESPHome Studio**.
+
+Mit Home Assistant bis 2026.10 und HACS: ⋮ → Benutzerdefinierte Repositories → dieselbe URL einfügen, Typ **Integration**.
+
+Für Entwickler: Der Workflow `release.yml` hängt bei jedem Release-Tag `esphome_studio.zip` an, `Validate` prüft bei jedem Push (hassfest, HACS-Prüfung, Tests).
 
 ## Benutzung
 
