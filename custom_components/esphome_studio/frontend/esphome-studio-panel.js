@@ -1023,7 +1023,9 @@ class ESPHomeStudioPanel extends HTMLElement {
         !this.simple && b?.platform === "esp8266"
           ? this._select("flash_mode", "Flash-Modus (ESP8266)", [["", "Standard"], ["dout", "dout"], ["dio", "dio"], ["qio", "qio"], ["qout", "qout"]], "dout hilft bei manchen Boards, die nach dem Flashen nicht starten.") : null,
         !this.simple && b?.platform === "esp8266"
-          ? this._select("early_pin_init", "Pins früh initialisieren (ESP8266)", [["", "Standard"], ["false", "aus"], ["true", "an"]], "„aus“ verhindert, dass Ausgänge beim Start kurz schalten.") : null),
+          ? this._select("early_pin_init", "Pins früh initialisieren (ESP8266)", [["", "Standard"], ["false", "aus"], ["true", "an"]], "„aus“ verhindert, dass Ausgänge beim Start kurz schalten.") : null,
+        !this.simple && b?.platform === "esp8266"
+          ? this._select("restore_from_flash", "Zustände bei Stromausfall behalten (ESP8266)", [["", "Automatisch"], ["true", "an"], ["false", "aus"]], "Ohne diese Option behält ein ESP8266 gespeicherte Werte (Lichter, Schalter, restore_value) nur bei einem Neustart, nicht bei Stromausfall. „Automatisch“ schaltet sie ein, sobald etwas im Gerät seinen Zustand wiederherstellen soll. Der Flash wird nur beschrieben, wenn sich ein Wert ändert.") : null),
       this.simple ? null : this._check("substitutions", "Platzhalter verwenden (substitutions)",
         "Schreibt Gerätename und Beschreibung oben als devicename und device_description ins YAML und nutzt sie weiter unten."),
       this.simple ? null : h("details", { open: this._extraOpen || !!this.p.extra_yaml, onToggle: (e) => { this._extraOpen = e.target.open; }, style: "margin-top:10px" },

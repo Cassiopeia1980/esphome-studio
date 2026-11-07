@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.16.0
+- Neu für ESP8266-Geräte: Option „Zustände bei Stromausfall behalten“ im Bereich „Gerät“ (`esp8266: restore_from_flash`). Ohne sie behält ein ESP8266 gespeicherte Werte (Lichter, Schalter, `restore_value`) nur bei einem Neustart, nicht bei einem Stromausfall. Standard „Automatisch“: das Studio schaltet die Option ein, sobald im fertigen YAML etwas seinen Zustand wiederherstellen soll (Lichter mit `restore_*`, Schalter ohne `restore_mode`, `restore_value: true`, auch im Zusatz-YAML). Der Flash wird nur beschrieben, wenn sich ein Wert ändert
+- Der Import übernimmt ein vorhandenes `restore_from_flash` (an/aus) in diese Option, statt es ins Zusatz-YAML zu legen
+- Geräte, die nichts wiederherstellen, bekommen die Zeile nicht
+
 ## 0.15.1
 - Neue Projekte schreiben bei Lichtern jetzt `restore_state` (ESPHome ab 2026.10). Bestehende, gespeicherte Projekte behalten ihre Schreibweise; der Haken „Neue Schreibweise für „Zustand nach Neustart““ im Bereich „Gerät“ schaltet um. Mit ESPHome 2026.9 oder älter den Haken entfernen
 - Der Import überführt `restore_mode` aus alten YAMLs beim Neuerzeugen in die neue Schreibweise (Haken entfernen, wenn das nicht gewünscht ist)

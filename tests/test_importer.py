@@ -325,3 +325,42 @@ def test_restore_state_with_single_fields_stays_extra():
         "    restore_mode: RESTORE_DEFAULT_OFF", "    restore_state:\n      state: KEEP\n      brightness: 50%")
     res = imp.import_yaml(t, ACE_SECRETS)
     assert res["ok"] and res["unmapped"]
+
+
+def test_restore_from_flash_auto_and_explicit():
+    # Schalter stellen ihren Zustand standardmäßig wieder her -> automatisch an
+    p = gen.default_project("d1_mini")
+    p["name"] = "rf"
+    p["friendly_name"] = "RF"
+    p["components"] = [gen.new_component("switch", "Relais", {"pin": "GPIO5"})]
+    r = gen.generate(p, STORED)
+    assert "restore_from_flash: true" in r["yaml"]
+    # ohne etwas zum Wiederherstellen: nicht schreiben
+    p2 = gen.default_project("d1_mini")
+    p2["name"] = "rf2"
+    p2["friendly_name"] = "RF2"
+    assert "restore_from_flash" not in gen.generate(p2, STORED)["yaml"]
+    # ausdrücklich an / aus
+    p2["restore_from_flash"] = "true"
+    assert "restore_from_flash: true" in gen.generate(p2, STORED)["yaml"]
+    p["restore_from_flash"] = "false"
+    assert "restore_from_flash: false" in gen.generate(p, STORED)["yaml"]
+    # Import übernimmt den Wert statt ihn zu verwerfen
+    res = imp.import_yaml(gen.generate(p2, STORED)["yaml"], gen.generate(p2, STORED)["secrets"])
+    assert res["ok"] and res["project"]["restore_from_flash"] == "true"
+
+
+def test_restore_from_flash_restore_value_in_extra():
+    p = gen.default_project("d1_mini")
+    p["name"] = "rv"
+    p["friendly_name"] = "RV"
+    p["extra_yaml"] = ("number:\n  - platform: template\n    name: W\n    optimistic: true\n"
+                       "    restore_value: true\n    min_value: 1\n    max_value: 9\n    step: 1\n")
+    assert "restore_from_flash: true" in gen.generate(p, STORED)["yaml"]
+
+
+def test_no_restore_from_flash_on_esp32():
+    p = gen.default_project("esp32dev") if "esp32dev" in boards.BOARDS else None
+    if p:
+        p["components"] = [gen.new_component("switch", "Relais", {"pin": "GPIO5"})]
+        assert "restore_from_flash" not in gen.generate(p, STORED)["yaml"]

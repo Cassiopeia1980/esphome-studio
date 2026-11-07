@@ -825,6 +825,11 @@ class _Importer:
                 p["flash_mode"] = fm
             elif fm is not None:
                 pblock["board_flash_mode"] = fm
+            rf = pblock.pop("restore_from_flash", None)
+            if isinstance(rf, bool):
+                p["restore_from_flash"] = "true" if rf else "false"
+            elif rf is not None:
+                pblock["restore_from_flash"] = rf
             ep = pblock.pop("early_pin_init", None)
             if isinstance(ep, bool):
                 p["early_pin_init"] = "true" if ep else "false"

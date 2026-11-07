@@ -248,6 +248,7 @@ def default_project(board: str = "d1_mini") -> dict[str, Any]:
         "substitutions": False,
         "flash_mode": "",
         "early_pin_init": "",
+        "restore_from_flash": "",
         "debug_interval": "30s",
         "i2c": dict(b["i2c_default"]),
         "components": [],
@@ -1530,6 +1531,13 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
             elif extra is not None:
                 ctx.err("Zusatz-YAML: Es muss ein YAML-Abschnitt mit Schlüsseln sein (z. B. „script:“ oder „globals:“).")
 
+    if plat_name == "esp8266" and isinstance(out.get("esp8266"), dict) and "restore_from_flash" not in out["esp8266"]:
+        rff = p.get("restore_from_flash")
+        if rff == "true" or (rff not in ("true", "false") and _needs_flash_restore(out)):
+            out["esp8266"]["restore_from_flash"] = True
+        elif rff == "false":
+            out["esp8266"]["restore_from_flash"] = False
+
     if "substitutions" in out and next(iter(out)) != "substitutions":
         out = {"substitutions": out.pop("substitutions"), **out}
 
@@ -1552,6 +1560,28 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
 
     return {"yaml": yaml_text, "secrets": secrets_text, "warnings": ctx.warnings, "errors": ctx.errors,
             "ok": not ctx.errors}
+
+
+
+def _needs_flash_restore(out: dict[str, Any]) -> bool:
+    """Gibt es im fertigen YAML etwas, das seinen Zustand über einen Stromausfall behalten soll?"""
+    for dom, items in out.items():
+        if not isinstance(items, list):
+            continue
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            if it.get("restore_value") is True:
+                return True
+            rm = str(it.get("restore_mode") or "")
+            if "RESTORE" in rm:
+                return True
+            rs = it.get("restore_state")
+            if rs not in (None, "none", False):
+                return True
+            if dom == "switch" and "restore_mode" not in it and "restore_state" not in it:
+                return True  # ESPHome-Standard bei Schaltern: letzten Zustand wiederherstellen
+    return False
 
 
 def generate(project: dict[str, Any], stored_secrets: dict[str, Any] | None = None, lang: str = "de") -> dict[str, Any]:
