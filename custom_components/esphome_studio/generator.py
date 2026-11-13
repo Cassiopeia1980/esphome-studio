@@ -1030,6 +1030,29 @@ def e_generic(ctx: Ctx, c: dict[str, Any]) -> None:
     ctx.add(e["domain"], d)
 
 
+def _keep_id(ctx: Ctx, c: dict[str, Any], before: dict[str, int]) -> None:
+    """Eine beim Import übernommene ``id`` auch dann schreiben, wenn der Baustein selbst keine braucht.
+
+    Zusatz-YAML (Skripte, Lambdas, Automationen) verweist oft auf diese ID. Ohne sie wäre der Verweis ins Leere gelaufen.
+    """
+    iid = c.get("id")
+    if not isinstance(iid, str) or not iid:
+        return
+    if c["type"] == "generic":
+        e = catalog_entry(str(c.get("cat") or ""))
+        if not e or e["domain"] == "hub" or e.get("subs") or e.get("no_id"):
+            return
+        domain = e["domain"]
+    else:
+        meta = ENT_META.get(c["type"])
+        if not meta or any(t["key"] for t in meta["targets"]):
+            return  # mehrere Entitäten in einem Eintrag: eine ID auf Plattformebene wäre ungültig
+        domain = meta["domain"]
+    items = [i for i in ctx.domains.get(domain, [])[before.get(domain, 0):] if isinstance(i, dict)]
+    if len(items) == 1 and "id" not in items[0]:
+        items[0]["id"] = ctx.cid(c)
+
+
 def _profi(ctx: Ctx, c: dict[str, Any], before: dict[str, int]) -> None:
     """Profi-Einstellungen (Name, Icon, Einheit, Filter …) in die gerade erzeugten Entitäten schreiben."""
     ent = (c.get("options") or {}).get("ent")
@@ -1289,6 +1312,7 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
         before = {k: len(v) for k, v in ctx.domains.items()}
         try:
             EMITTERS[c["type"]](ctx, c)
+            _keep_id(ctx, c, before)
             _profi(ctx, c, before)
         except Exception as exc:  # noqa: BLE001 - Eingaben sind frei, Generator darf nie abstürzen
             ctx.err(f"„{c['name']}“: interner Fehler ({exc}).")

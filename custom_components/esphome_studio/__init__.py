@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .bulk import apply_patch, modernize, roundtrip_diff
+from .bulk import apply_patch, modernize, roundtrip_diff, undefined_ids
 from .catalog import catalog
 from .entity import entity_meta
 from .boards import BOARDS, board_detail, boards_meta
@@ -64,7 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data.get(WS_REGISTERED):
         for handler in (ws_meta, ws_board, ws_catalog, ws_import, ws_list, ws_get, ws_save, ws_delete, ws_new, ws_generate, ws_set_secrets,
                         ws_random, ws_deploy_settings, ws_deploy, ws_i18n, ws_source_list, ws_source_get, ws_secret_store,
-                        ws_source_import, ws_project_patch, ws_backup_get, ws_backup_restore):
+                        ws_source_import, ws_project_patch, ws_check_all, ws_backup_get, ws_backup_restore):
             websocket_api.async_register_command(hass, handler)
         hass.data[WS_REGISTERED] = True
 
@@ -602,6 +602,11 @@ async def _finish_deploy(hass, st, project: dict[str, Any], lg: str, summary: di
         summary["deployed"] = False
         summary["errors"] = res.get("errors", [])
         return
+    missing = undefined_ids(res["yaml"])
+    if missing:
+        summary["deployed"] = False
+        summary["errors"] = [tr("Das YAML verweist auf IDs, die es nicht gibt: {0}. Nicht geschrieben.", lg).format(", ".join(missing))]
+        return
     out = await _write_yaml(hass, st, _file_stem(project), res["yaml"], res.get("secrets", ""), lg)
     out.pop("previous", None)
     _ota_warning(project, out, lg)
@@ -721,6 +726,33 @@ async def ws_project_patch(hass, connection, msg):
     except OSError as exc:
         summary["errors"] = [tr(f"Schreiben fehlgeschlagen: {exc.strerror or exc}", lg)]
     connection.send_result(msg["id"], summary)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/check_all",
+    vol.Optional("lang"): str,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_check_all(hass, connection, msg):
+    """Alle gespeicherten Projekte erzeugen und prüfen (Fehler, Verweise auf fehlende IDs). Liefert nur die auffälligen."""
+    lg = _lang(msg)
+    st = _state(hass, connection, msg["id"], lg)
+    if not st:
+        return
+    problems = []
+    projects = st["data"]["projects"]
+    for pid, project in sorted(projects.items(), key=lambda kv: str(kv[1].get("name"))):
+        res = generate(project, st["data"]["secrets"], lg)
+        issues = list(res.get("errors", [])) if not res.get("ok") else []
+        if res.get("ok"):
+            try:
+                issues += [tr("Verweis auf fehlende ID: {0}", lg).format(i) for i in undefined_ids(res["yaml"])]
+            except ValueError as exc:
+                issues.append(str(exc))
+        if issues:
+            problems.append({"name": project.get("name"), "id": pid, "issues": issues})
+    connection.send_result(msg["id"], {"checked": len(projects), "problems": problems})
 
 
 @websocket_api.websocket_command({

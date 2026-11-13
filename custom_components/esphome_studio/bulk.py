@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import difflib
 import json
+import re
 from typing import Any
 
 import yaml
@@ -152,3 +153,43 @@ def roundtrip_diff(original: str, generated: str, ignore: tuple[str, ...] = ("su
         lines.extend(l for l in difflib.unified_diff((a.get(key) or "").splitlines(), (b.get(key) or "").splitlines(),
                                                       "original", "neu", lineterm="", n=0) if not l.startswith(("---", "+++", "@@")))
     return lines[:limit] + (["…"] if len(lines) > limit else [])
+
+
+# ------------------------------------------------ Verweise auf IDs prüfen --
+
+_ACTION_KEY = re.compile(r"^(binary_sensor|sensor|text_sensor|switch|light|button|number|select|text|fan|cover|climate|lock|"
+                         r"script|output|globals|display|datetime|valve|media_player)\.[a-z_.]+$")
+_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_LAMBDA_ID = re.compile(r"\bid\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)")
+
+
+def undefined_ids(text: str) -> list[str]:
+    """IDs, auf die das YAML verweist (Lambdas, Aktionen, Bedingungen, ``…_id``), die es aber nirgends definiert.
+
+    Einfache Plausibilitätsprüfung, ersetzt kein ``esphome config``; sie fängt aber den häufigsten Importfehler ab
+    (Verweis im Zusatz-YAML auf eine ID, die der erzeugte Baustein nicht mehr trägt).
+    """
+    data = load_text(text) or {}
+    defined: set[str] = set()
+    refs: set[str] = set()
+
+    def walk(obj: Any) -> None:
+        if isinstance(obj, Tag):
+            return
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                ks = str(k)
+                if ks == "id" and isinstance(v, str):
+                    defined.add(v)
+                elif isinstance(v, str) and not v.startswith("$") and _IDENT.match(v) and (
+                        _ACTION_KEY.match(ks) or (ks.endswith("_id") and ks != "id")):
+                    refs.add(v)
+                walk(v)
+        elif isinstance(obj, list):
+            for v in obj:
+                walk(v)
+        elif isinstance(obj, str):
+            refs.update(_LAMBDA_ID.findall(obj))
+
+    walk(data)
+    return sorted(refs - defined)

@@ -452,5 +452,7 @@
   "Umstellung auf OTA-Verschlüsselung aktiv: nach dem erfolgreichen Update die Option „Einmalige Umstellung“ ausschalten und neu speichern.": "OTA encryption switch is active: after the update succeeded, turn off the option \"One-time switch\" and save again.",
   "Für die einmalige Umstellung auf OTA-Verschlüsselung wird das bisherige OTA-Passwort gebraucht.": "The previous OTA password is needed for the one-time switch to OTA encryption.",
   "Der Taster „{0}“ schaltet „{1}“ um. Das Ziel ist nicht abbildbar; der Eintrag bleibt unverändert im Zusatz-YAML.": "The button “{0}” toggles “{1}”. The target cannot be mapped; the entry stays unchanged in the extra YAML.",
-  "Der Kontakt „{0}“ schaltet „{1}“ mit. Das Ziel ist nicht abbildbar; der Eintrag bleibt unverändert im Zusatz-YAML.": "The contact “{0}” also switches “{1}”. The target cannot be mapped; the entry stays unchanged in the extra YAML."
+  "Der Kontakt „{0}“ schaltet „{1}“ mit. Das Ziel ist nicht abbildbar; der Eintrag bleibt unverändert im Zusatz-YAML.": "The contact “{0}” also switches “{1}”. The target cannot be mapped; the entry stays unchanged in the extra YAML.",
+  "Das YAML verweist auf IDs, die es nicht gibt: {0}. Nicht geschrieben.": "The YAML refers to IDs that do not exist: {0}. Not written.",
+  "Verweis auf fehlende ID: {0}": "Reference to missing ID: {0}"
 }

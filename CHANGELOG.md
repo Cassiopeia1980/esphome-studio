@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.2
+- Fix: beim Import behält ein abgebildeter Baustein seine `id`, wenn das Zusatz-YAML (Lambda, Skript, Automation) darauf verweist; vorher fehlte die ID im erzeugten YAML und ESPHome meldete einen Fehler
+- Neu: Prüfung auf Verweise auf nicht vorhandene IDs; `source_import`/`project_patch` schreiben solches YAML nicht mehr, neuer Befehl `esphome_studio/check_all` prüft alle gespeicherten Projekte
+
 ## 0.17.1
 - Import: eine Taster-Aktion (z. B. `light.toggle`), deren Ziel das Studio nicht abbilden kann, geht nicht mehr verloren; der Taster bleibt unverändert im Zusatz-YAML
 - Import: `one_wire:` in der alten Schreibweise (ein Eintrag statt Liste) und ein DS18B20 ohne `one_wire_id` werden erkannt, statt den Bus zu verwerfen

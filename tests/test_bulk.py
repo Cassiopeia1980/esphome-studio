@@ -278,3 +278,61 @@ def test_roundtrip_ignores_default_resolution_and_wifi_interval():
     assert bulk.roundtrip_diff(a, b) == []
     c = "sensor:\n  - platform: dallas_temp\n    resolution: 10\n"
     assert bulk.roundtrip_diff(c, b)
+
+
+HDMI_LIKE = """\
+substitutions:
+  devicename: "hdmi"
+esphome:
+  name: $devicename
+esp32:
+  board: esp32dev
+logger:
+api:
+ota:
+  platform: esphome
+  password: !secret ota
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+binary_sensor:
+  - platform: gpio
+    id: a_hdmi1
+    name: "Out A = HDMI 1"
+    pin:
+      number: GPIO22
+      mode: INPUT_PULLDOWN
+      inverted: true
+text_sensor:
+  - platform: template
+    name: "aktueller Eingang"
+    lambda: |-
+      if (id(a_hdmi1).state) return {"HDMI 1"};
+      return {"unbekannt"};
+script:
+  - id: waehle
+    then:
+      - if:
+          condition:
+            binary_sensor.is_on: a_hdmi1
+          then:
+            - logger.log: "an"
+"""
+
+
+def test_imported_id_is_kept_when_extra_yaml_refers_to_it():
+    res = importer.import_yaml(HDMI_LIKE, SECRETS)
+    assert res["ok"], res
+    out = gen.generate(res["project"], {**WIFI, "ap_password": "hotspot1234"})
+    assert out["ok"], out["errors"]
+    assert "id: a_hdmi1" in out["yaml"]
+    diff = "\n".join(bulk.roundtrip_diff(HDMI_LIKE, out["yaml"]))
+    assert "binary_sensor.is_on: a_hdmi1" not in diff, diff
+
+
+def test_undefined_ids_detects_missing_reference():
+    from custom_components.esphome_studio.bulk import undefined_ids
+    ok = "binary_sensor:\n  - platform: gpio\n    id: a\n    pin: 1\nscript:\n  - id: s\n    then:\n      - lambda: 'return id(a).state;'\n"
+    assert undefined_ids(ok) == []
+    bad = ok.replace("    id: a\n", "")
+    assert undefined_ids(bad) == ["a"]
