@@ -344,3 +344,28 @@ def test_undefined_ids_ignores_name_derived_ids_and_service_variables():
          "api:\n  services:\n    - service: s\n      variables:\n        x: string\n      then:\n"
          "        - lambda: 'return id(display_brightness).state;'\n")
     assert undefined_ids(y) == []
+
+
+def test_cleanup_diagnostics_moves_uptime_to_text_and_keeps_entity_name():
+    from custom_components.esphome_studio.bulk import cleanup_diagnostics
+    p = {
+        "web_server": True,
+        "diag": {"uptime": False, "debug_heap": True, "debug_loop": True, "debug_reset": True},
+        "extra_yaml": (
+            "web_server:\n  port: 80\n"
+            "sensor:\n  - platform: uptime\n    name: Uptime\n    id: uptime_s\n"
+            "  - platform: template\n    name: Keep\n    lambda: 'return 1;'\n"
+            "text_sensor:\n  - platform: template\n    name: Uhr Betriebszeit\n    icon: mdi:clock-start\n"
+            "    lambda: |-\n      uint32_t dur = id(uptime_s).state;\n      return {\"x\"};\n"
+            "  - platform: debug\n    reset_reason:\n      name: Reset\n    foo: 1\n"),
+    }
+    notes = cleanup_diagnostics(p)
+    assert notes
+    assert p["web_server"] is False
+    assert p["diag"]["debug_heap"] is False and p["diag"]["debug_loop"] is False and p["diag"]["debug_reset"] is True
+    assert p["diag"]["uptime_text"] is True and p["diag"]["uptime"] is False
+    assert p["diag_custom"]["uptime_text"]["name"] == "Uhr Betriebszeit"
+    assert p["diag_custom"]["uptime_text"]["icon"] == "mdi:clock-start"
+    assert "web_server" not in p["extra_yaml"] and "uptime_s" not in p["extra_yaml"]
+    assert "Keep" in p["extra_yaml"] and "foo" not in p["extra_yaml"]
+    assert cleanup_diagnostics(p) == []  # idempotent

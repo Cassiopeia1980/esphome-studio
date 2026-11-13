@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from .generator import new_api_key, slug
+from .generator import dump_yaml, new_api_key, slug
 from .yamlutil import Tag, load_text
 
 
@@ -37,7 +37,7 @@ def _merge(dst: dict[str, Any], patch: dict[str, Any]) -> None:
             dst[key] = copy.deepcopy(val)
 
 
-def apply_patch(project: dict[str, Any], patch: dict[str, Any]) -> list[str]:
+def apply_patch(project: dict[str, Any], patch: dict[str, Any], notes: list[str] | None = None) -> list[str]:
     """Mischt ``patch`` in das Projekt. Dicts werden verschmolzen, alles andere ersetzt.
 
     ``patch["components"]`` ist eine Liste von Einträgen ``{"name": …, "options": {…}}`` (oder ``uid``/``type``/``pins``),
@@ -46,7 +46,12 @@ def apply_patch(project: dict[str, Any], patch: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     patch = dict(patch or {})
     comp_patch = patch.pop("components", None)
+    do_cleanup = patch.pop("cleanup", False)
     _merge(project, patch)
+    if do_cleanup:
+        found = cleanup_diagnostics(project)
+        if notes is not None:
+            notes.extend(found)
     if comp_patch:
         comps = project.setdefault("components", [])
         for item in comp_patch:
@@ -198,3 +203,110 @@ def undefined_ids(text: str) -> list[str]:
 
     walk(data)
     return sorted(refs - defined)
+
+
+# ------------------------------------------- Diagnose aufräumen (Sammelumbau) --
+
+def _tval(v: Any) -> Any:
+    return v.value if isinstance(v, Tag) else v
+
+
+def cleanup_diagnostics(project: dict[str, Any]) -> list[str]:
+    """Web-Server aus, Debug-Sensoren bis auf den Reset-Grund aus, Betriebszeit nur als Text.
+
+    Räumt auch das Zusatz-YAML auf: ``web_server``, Sensoren der Plattform ``uptime``, Debug-Sensoren und alte
+    Template-Sensoren, die per Lambda eine Betriebszeit berechnen. Name, Symbol und Kategorie der alten Text-Betriebszeit
+    bleiben erhalten (``diag_custom``), damit die Entität in Home Assistant dieselbe bleibt.
+    """
+    notes: list[str] = []
+    diag = project.setdefault("diag", {})
+    if project.get("web_server"):
+        project["web_server"] = False
+        notes.append("Web-Server ausgeschaltet")
+    had_debug = any(diag.get(k) for k in ("debug_heap", "debug_loop", "debug_reset"))
+    for k in ("debug_heap", "debug_loop"):
+        if diag.get(k):
+            diag[k] = False
+            notes.append("Debug-Sensor aus (" + k + ")")
+    if had_debug:
+        diag["debug_reset"] = True
+
+    uptime_removed = False
+    candidates: list[dict[str, Any]] = []
+    text = str(project.get("extra_yaml") or "").strip()
+    if text:
+        extra = load_text(text)
+        if isinstance(extra, dict):
+            changed = False
+            if "web_server" in extra:
+                del extra["web_server"]
+                changed = True
+                notes.append("web_server aus dem Zusatz-YAML entfernt")
+            uptime_ids: set[str] = set()
+            sensors = extra.get("sensor")
+            if isinstance(sensors, list):
+                keep = []
+                for it in sensors:
+                    plat = it.get("platform") if isinstance(it, dict) else None
+                    if plat == "uptime":
+                        if isinstance(it.get("id"), str):
+                            uptime_ids.add(it["id"])
+                        uptime_removed = True
+                        changed = True
+                        notes.append(f"Uptime-Sensor „{it.get('name', '')}“ entfernt")
+                        continue
+                    if plat == "debug":
+                        changed = True
+                        notes.append("Debug-Sensoren aus dem Zusatz-YAML entfernt")
+                        continue
+                    keep.append(it)
+                if len(keep) != len(sensors):
+                    extra["sensor"] = keep
+            tsens = extra.get("text_sensor")
+            if isinstance(tsens, list):
+                keep = []
+                for it in tsens:
+                    plat = it.get("platform") if isinstance(it, dict) else None
+                    lam = str(_tval(it.get("lambda")) or "") if isinstance(it, dict) else ""
+                    if plat == "uptime" or (plat == "template" and any(re.search(rf"\bid\(\s*{re.escape(i)}\s*\)", lam)
+                                                                      for i in uptime_ids)):
+                        candidates.append(it)
+                        changed = True
+                        notes.append(f"Betriebszeit „{it.get('name', '')}“ aus dem Zusatz-YAML entfernt (kommt jetzt vom Studio)")
+                        continue
+                    if plat == "debug":
+                        rest = {k: v for k, v in it.items() if k in ("platform", "reset_reason")}
+                        if len(rest) != len(it):
+                            changed = True
+                            notes.append("Debug-Text-Sensoren bis auf den Reset-Grund entfernt")
+                        if len(rest) > 1:
+                            keep.append(rest)
+                        continue
+                    keep.append(it)
+                if len(keep) != len(tsens):
+                    extra["text_sensor"] = keep
+            for dom in ("sensor", "text_sensor"):
+                if dom in extra and not extra[dom]:
+                    del extra[dom]
+            if changed:
+                project["extra_yaml"] = dump_yaml(extra).rstrip("\n") + "\n" if extra else ""
+
+    want_text = bool(candidates) or uptime_removed or bool(diag.get("uptime"))
+    if diag.get("uptime"):
+        diag["uptime"] = False
+        notes.append("Laufzeit als Zahl ausgeschaltet")
+    if want_text and not diag.get("uptime_text"):
+        diag["uptime_text"] = True
+        notes.append("Betriebszeit als Text eingeschaltet")
+    if candidates:
+        c = candidates[0]
+        custom = project.setdefault("diag_custom", {}).setdefault("uptime_text", {})
+        if isinstance(c.get("name"), str):
+            custom["name"] = c["name"]
+        if isinstance(c.get("icon"), str):
+            custom["icon"] = c["icon"]
+        if isinstance(c.get("entity_category"), str):
+            custom["category"] = c["entity_category"]
+        if isinstance(c.get("format"), dict):
+            custom["format"] = {k: _tval(v) for k, v in c["format"].items()}
+    return notes

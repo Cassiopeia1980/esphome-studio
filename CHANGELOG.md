@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.4
+- Neu: `patch.cleanup: true` bei `esphome_studio/project_patch` räumt die Diagnose auf: Web-Server aus, Debug-Sensoren bis auf den Reset-Grund aus, Betriebszeit nur als Text (Zahl-Laufzeit aus). Auch im Zusatz-YAML werden `web_server`, `uptime`-Sensoren, Debug-Sensoren und alte Lambda-Betriebszeiten entfernt; Name, Symbol und Kategorie der bisherigen Text-Betriebszeit bleiben erhalten, damit die Entität in Home Assistant dieselbe bleibt
+- Neu: `esphome_studio/bulk_patch` wendet dieselbe Änderung auf viele Geräte an und meldet je Gerät nur Fehler und Hinweise
+- `project_patch` speichert und deployt nichts mehr, wenn das erzeugte YAML Fehler oder fehlende IDs hat
+
 ## 0.17.3
 - Fix: die ID-Prüfung kennt jetzt aus dem Namen abgeleitete IDs (ESPHome erzeugt `display_brightness` aus „Display Brightness“) und ignoriert Typangaben bei `variables:` von API-Diensten; vorher meldete sie fälschlich fehlende IDs
 

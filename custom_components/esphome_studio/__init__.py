@@ -64,7 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data.get(WS_REGISTERED):
         for handler in (ws_meta, ws_board, ws_catalog, ws_import, ws_list, ws_get, ws_save, ws_delete, ws_new, ws_generate, ws_set_secrets,
                         ws_random, ws_deploy_settings, ws_deploy, ws_i18n, ws_source_list, ws_source_get, ws_secret_store,
-                        ws_source_import, ws_project_patch, ws_check_all, ws_backup_get, ws_backup_restore):
+                        ws_source_import, ws_project_patch, ws_bulk_patch, ws_check_all, ws_backup_get, ws_backup_restore):
             websocket_api.async_register_command(hass, handler)
         hass.data[WS_REGISTERED] = True
 
@@ -689,6 +689,41 @@ async def ws_source_import(hass, connection, msg):
     connection.send_result(msg["id"], summary)
 
 
+async def _patch_one(hass, st, name: str, patch: dict[str, Any], deploy: bool, lg: str) -> dict[str, Any] | None:
+    """Ändert ein gespeichertes Projekt und deployt es auf Wunsch. ``None``, wenn es das Projekt nicht gibt."""
+    pid = _project_by_name(st, name)
+    if not pid:
+        return None
+    project = json.loads(json.dumps(st["data"]["projects"][pid]))
+    notes: list[str] = []
+    summary: dict[str, Any] = {"id": pid, "name": name}
+    try:
+        summary["patch_problems"] = apply_patch(project, json.loads(json.dumps(patch)), notes)
+        if notes:
+            summary["notes"] = notes
+        if _clean_project(project) is None:
+            raise DeployError("Das Projekt ist ungültig oder zu groß.")
+        gen = generate(project, st["data"]["secrets"], lg)
+        summary["warnings"] = gen.get("warnings", [])
+        if gen.get("ok"):
+            missing = undefined_ids(gen["yaml"])
+            if missing:
+                summary["errors"] = [tr("Das YAML verweist auf IDs, die es nicht gibt: {0}. Nicht geschrieben.", lg).format(", ".join(missing))]
+        else:
+            summary["errors"] = gen.get("errors", [])
+        if "errors" not in summary:
+            await _save_project(st, project, pid)
+            if deploy:
+                await _finish_deploy(hass, st, project, lg, summary)
+    except ValueError as exc:
+        summary["errors"] = [str(exc)]
+    except DeployError as exc:
+        summary["errors"] = [tr(str(exc), lg)]
+    except OSError as exc:
+        summary["errors"] = [tr(f"Schreiben fehlgeschlagen: {exc.strerror or exc}", lg)]
+    return summary
+
+
 @websocket_api.websocket_command({
     vol.Required("type"): "esphome_studio/project_patch",
     vol.Optional("lang"): str,
@@ -699,33 +734,49 @@ async def ws_source_import(hass, connection, msg):
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_project_patch(hass, connection, msg):
-    """Einzelne Einstellungen eines gespeicherten Projekts ändern (Dicts verschmelzen, ``components`` über den Namen)."""
+    """Einzelne Einstellungen eines gespeicherten Projekts ändern (Dicts verschmelzen, ``components`` über den Namen).
+
+    ``patch.cleanup: true`` schaltet Web-Server und Debug-Sensoren (bis auf den Reset-Grund) aus und stellt die
+    Betriebszeit auf Text um, auch im Zusatz-YAML.
+    """
     lg = _lang(msg)
     st = _state(hass, connection, msg["id"], lg)
     if not st:
         return
-    pid = _project_by_name(st, msg["name"])
-    if not pid:
+    summary = await _patch_one(hass, st, msg["name"], msg["patch"], msg["deploy"], lg)
+    if summary is None:
         connection.send_error(msg["id"], "not_found", tr("Projekt nicht gefunden.", lg))
         return
-    project = json.loads(json.dumps(st["data"]["projects"][pid]))
-    summary: dict[str, Any] = {"id": pid, "name": msg["name"], "patch_problems": apply_patch(project, msg["patch"])}
-    try:
-        if _clean_project(project) is None:
-            raise DeployError("Das Projekt ist ungültig oder zu groß.")
-        await _save_project(st, project, pid)
-        if msg["deploy"]:
-            await _finish_deploy(hass, st, project, lg, summary)
-        else:
-            gen = generate(project, st["data"]["secrets"], lg)
-            summary["warnings"] = gen.get("warnings", [])
-            if not gen.get("ok"):
-                summary["errors"] = gen.get("errors", [])
-    except DeployError as exc:
-        summary["errors"] = [tr(str(exc), lg)]
-    except OSError as exc:
-        summary["errors"] = [tr(f"Schreiben fehlgeschlagen: {exc.strerror or exc}", lg)]
     connection.send_result(msg["id"], summary)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/bulk_patch",
+    vol.Optional("lang"): str,
+    vol.Required("names"): [str],
+    vol.Required("patch"): dict,
+    vol.Optional("deploy", default=False): bool,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_bulk_patch(hass, connection, msg):
+    """Dieselbe Änderung auf mehrere Projekte anwenden. Liefert je Gerät nur das Wesentliche (Fehler, Hinweise)."""
+    lg = _lang(msg)
+    st = _state(hass, connection, msg["id"], lg)
+    if not st:
+        return
+    results = []
+    for name in msg["names"]:
+        summary = await _patch_one(hass, st, name, msg["patch"], msg["deploy"], lg)
+        if summary is None:
+            results.append({"name": name, "errors": [tr("Projekt nicht gefunden.", lg)]})
+            continue
+        short: dict[str, Any] = {"name": name, "ok": "errors" not in summary and (summary.get("deployed", True))}
+        for k in ("errors", "notes", "patch_problems"):
+            if summary.get(k):
+                short[k] = summary[k]
+        results.append(short)
+    connection.send_result(msg["id"], {"results": results, "failed": [r["name"] for r in results if not r["ok"]]})
 
 
 @websocket_api.websocket_command({
