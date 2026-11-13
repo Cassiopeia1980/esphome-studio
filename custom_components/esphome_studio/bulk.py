@@ -212,7 +212,7 @@ def _tval(v: Any) -> Any:
 
 
 def cleanup_diagnostics(project: dict[str, Any]) -> list[str]:
-    """Web-Server aus, Debug-Sensoren bis auf den Reset-Grund aus, Betriebszeit nur als Text.
+    """Web-Server aus, Debug-Sensoren bis auf den Reset-Grund aus, beide Uptime-Sensoren (Zahl und Text) vom Studio.
 
     Räumt auch das Zusatz-YAML auf: ``web_server``, Sensoren der Plattform ``uptime``, Debug-Sensoren und alte
     Template-Sensoren, die per Lambda eine Betriebszeit berechnen. Name, Symbol und Kategorie der alten Text-Betriebszeit
@@ -232,6 +232,7 @@ def cleanup_diagnostics(project: dict[str, Any]) -> list[str]:
         diag["debug_reset"] = True
 
     uptime_removed = False
+    numeric_info: dict[str, Any] = {}
     candidates: list[dict[str, Any]] = []
     text = str(project.get("extra_yaml") or "").strip()
     if text:
@@ -288,7 +289,11 @@ def cleanup_diagnostics(project: dict[str, Any]) -> list[str]:
                             continue
                         uptime_removed = True
                         changed = True
-                        notes.append(f"Uptime-Sensor „{it.get('name', '')}“ entfernt")
+                        if isinstance(it.get("name"), str) and it["name"].strip() and not it.get("internal"):
+                            numeric_info = {k: it[k] for k in ("name", "icon") if isinstance(it.get(k), str)}
+                            if isinstance(it.get("entity_category"), str):
+                                numeric_info["category"] = it["entity_category"]
+                        notes.append(f"Uptime-Sensor „{it.get('name', '')}“ in die Studio-Laufzeit übernommen")
                         continue
                     if isinstance(it, dict) and it.get("platform") == "debug":
                         changed = True
@@ -303,13 +308,14 @@ def cleanup_diagnostics(project: dict[str, Any]) -> list[str]:
             if changed:
                 project["extra_yaml"] = dump_yaml(extra).rstrip("\n") + "\n" if extra else ""
 
-    want_text = bool(candidates) or uptime_removed or bool(diag.get("uptime"))
-    if diag.get("uptime"):
-        diag["uptime"] = False
-        notes.append("Laufzeit als Zahl ausgeschaltet")
-    if want_text and not diag.get("uptime_text"):
+    if not diag.get("uptime"):
+        diag["uptime"] = True
+        notes.append("Laufzeit als Zahl eingeschaltet")
+    if not diag.get("uptime_text"):
         diag["uptime_text"] = True
         notes.append("Betriebszeit als Text eingeschaltet")
+    if numeric_info:
+        project.setdefault("diag_custom", {}).setdefault("uptime", {}).update(numeric_info)
     if candidates:
         c = candidates[0]
         custom = project.setdefault("diag_custom", {}).setdefault("uptime_text", {})
@@ -322,3 +328,33 @@ def cleanup_diagnostics(project: dict[str, Any]) -> list[str]:
         if isinstance(c.get("format"), dict):
             custom["format"] = {k: _tval(v) for k, v in c["format"].items()}
     return notes
+
+
+def _expand(text: str, subs: dict[str, Any]) -> str:
+    def rep(m: re.Match[str]) -> str:
+        key = m.group(1) or m.group(2)
+        return str(subs[key]) if key in subs else m.group(0)
+    return re.sub(r"\$\{(\w+)\}|\$(\w+)", rep, text)
+
+
+def uptime_entity_from_yaml(yaml_text: str) -> dict[str, Any]:
+    """Name, Symbol und Kategorie des sichtbaren Uptime-Sensors (Zahl) aus einer älteren YAML. Leer, wenn es keinen gibt.
+
+    Substitutionen im Namen (``${friendly_name}``) werden aufgelöst, damit der Name in jedem Fall derselbe Text ist.
+    """
+    data = load_text(yaml_text) or {}
+    if not isinstance(data, dict):
+        return {}
+    subs = data.get("substitutions") if isinstance(data.get("substitutions"), dict) else {}
+    subs = {str(k): _tval(v) for k, v in subs.items()}
+    sensors = data.get("sensor")
+    for it in sensors if isinstance(sensors, list) else []:
+        if isinstance(it, dict) and it.get("platform") == "uptime" and not it.get("internal") and isinstance(it.get("name"), str) \
+                and it["name"].strip():
+            out: dict[str, Any] = {"name": _expand(it["name"], subs)}
+            if isinstance(it.get("icon"), str):
+                out["icon"] = it["icon"]
+            if isinstance(it.get("entity_category"), str):
+                out["category"] = it["entity_category"]
+            return out
+    return {}

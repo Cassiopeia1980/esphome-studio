@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.6
+- `cleanup` schaltet jetzt beide Uptime-Sensoren des Studios an (Laufzeit als Zahl und Betriebszeit als Text) und übernimmt Name, Symbol und Kategorie eines entfernten Zahl-Sensors, damit die Entität in Home Assistant dieselbe bleibt
+- Neu: `patch.restore_uptime_names: true` holt den Namen des früheren sichtbaren Uptime-Sensors aus der ersten Sicherung (Substitutionen aufgelöst); für Geräte, die schon bereinigt wurden
+
 ## 0.17.5
 - Fix: `cleanup` behält einen internen Uptime-Sensor, wenn andere Teile ihn per `id(...)` nutzen (z. B. Start-Sperre im Schalter-Lambda); vorher blockierte die ID-Prüfung das Gerät
 

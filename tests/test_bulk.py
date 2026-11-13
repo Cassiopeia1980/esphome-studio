@@ -363,7 +363,8 @@ def test_cleanup_diagnostics_moves_uptime_to_text_and_keeps_entity_name():
     assert notes
     assert p["web_server"] is False
     assert p["diag"]["debug_heap"] is False and p["diag"]["debug_loop"] is False and p["diag"]["debug_reset"] is True
-    assert p["diag"]["uptime_text"] is True and p["diag"]["uptime"] is False
+    assert p["diag"]["uptime_text"] is True and p["diag"]["uptime"] is True
+    assert p["diag_custom"]["uptime"]["name"] == "Uptime"
     assert p["diag_custom"]["uptime_text"]["name"] == "Uhr Betriebszeit"
     assert p["diag_custom"]["uptime_text"]["icon"] == "mdi:clock-start"
     assert "web_server" not in p["extra_yaml"] and "uptime_s" not in p["extra_yaml"]
@@ -385,3 +386,11 @@ def test_cleanup_keeps_uptime_sensor_that_is_still_referenced():
     assert "uptime_s" in p["extra_yaml"] and "platform: uptime" in p["extra_yaml"]
     assert "Betriebszeit" not in p["extra_yaml"]
     assert p["diag"]["uptime_text"] is True
+
+
+def test_uptime_entity_from_yaml_resolves_substitutions_and_skips_internal():
+    from custom_components.esphome_studio.bulk import uptime_entity_from_yaml
+    y = ("substitutions:\n  friendly_name: Kammer\nsensor:\n  - platform: uptime\n    id: a\n    internal: true\n"
+         "  - platform: uptime\n    name: \"${friendly_name} Uptime\"\n    icon: mdi:x\n")
+    assert uptime_entity_from_yaml(y) == {"name": "Kammer Uptime", "icon": "mdi:x"}
+    assert uptime_entity_from_yaml("sensor:\n  - platform: uptime\n    internal: true\n") == {}

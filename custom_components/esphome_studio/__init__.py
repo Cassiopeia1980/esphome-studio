@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .bulk import apply_patch, modernize, roundtrip_diff, undefined_ids
+from .bulk import apply_patch, modernize, roundtrip_diff, undefined_ids, uptime_entity_from_yaml
 from .catalog import catalog
 from .entity import entity_meta
 from .boards import BOARDS, board_detail, boards_meta
@@ -697,8 +697,16 @@ async def _patch_one(hass, st, name: str, patch: dict[str, Any], deploy: bool, l
     project = json.loads(json.dumps(st["data"]["projects"][pid]))
     notes: list[str] = []
     summary: dict[str, Any] = {"id": pid, "name": name}
+    patch = json.loads(json.dumps(patch))
+    restore_names = bool(patch.pop("restore_uptime_names", False))
     try:
-        summary["patch_problems"] = apply_patch(project, json.loads(json.dumps(patch)), notes)
+        summary["patch_problems"] = apply_patch(project, patch, notes)
+        if restore_names:
+            entry = (st["data"].get("backups") or {}).get(_file_stem(project)) or {}
+            info = uptime_entity_from_yaml(entry.get("original") or "") if entry.get("original") else {}
+            if info:
+                project.setdefault("diag_custom", {}).setdefault("uptime", {}).update(info)
+                notes.append(f"Name des Laufzeit-Sensors aus dem Original übernommen: {info['name']}")
         if notes:
             summary["notes"] = notes
         if _clean_project(project) is None:
