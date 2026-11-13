@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.1
+- Import: eine Taster-Aktion (z. B. `light.toggle`), deren Ziel das Studio nicht abbilden kann, geht nicht mehr verloren; der Taster bleibt unverändert im Zusatz-YAML
+- Import: `one_wire:` in der alten Schreibweise (ein Eintrag statt Liste) und ein DS18B20 ohne `one_wire_id` werden erkannt, statt den Bus zu verwerfen
+- Vergleich beim Umbau ignoriert Standardwerte (`resolution: 12`, `update_interval: 60s`) und die Schreibweise von `one_wire`
+
 ## 0.17.0
 - Neu: **einmalige Umstellung auf OTA-Verschlüsselung** (ESPHome ab 2026.10, `allow_plaintext_upload`). Ein Gerät, das noch mit OTA-Passwort läuft, nimmt das nächste Update noch mit dem alten Passwort an und ist danach verschlüsselt, ohne USB-Flash. Option „Einmalige Umstellung von OTA-Passwort“ im Bereich „WLAN, Secrets & Sicherheit“; nach dem erfolgreichen Update ausschalten und neu speichern. Der Import erkennt diesen Zustand
 - Neue Websocket-Befehle zum Umbauen vieler bestehender Geräte (für Automatisierungen und Assistenten):

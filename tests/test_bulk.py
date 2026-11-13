@@ -184,3 +184,97 @@ def test_roundtrip_ignores_order_and_comments():
     a = "sensor:\n  - platform: a\n  - platform: b\n# Kommentar\n"
     b = "sensor:\n  - platform: b\n  - platform: a\n"
     assert bulk.roundtrip_diff(a, b) == []
+
+
+SONOFF_OLD = """\
+substitutions:
+  devicename: "dachboden"
+esphome:
+  name: $devicename
+esp8266:
+  board: esp01_1m
+logger:
+api:
+ota:
+  platform: esphome
+  password: !secret ota
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO0
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Taster"
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+    on_press:
+      - light.toggle: light1
+light:
+  - platform: binary
+    name: "Lampe"
+    id: light1
+    output: relay
+output:
+  - platform: gpio
+    pin: GPIO12
+    id: relay
+"""
+
+DALLAS_OLD = """\
+substitutions:
+  devicename: "aq"
+esphome:
+  name: $devicename
+esp8266:
+  board: d1_mini
+logger:
+api:
+ota:
+  platform: esphome
+  password: !secret ota
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+one_wire:
+  platform: gpio
+  pin: GPIO2
+sensor:
+  - platform: dallas_temp
+    address: 0x740119380813e928
+    name: "Temperatur"
+"""
+
+WIFI = {"wifi_ssid": "netz", "wifi_password": "passwort1234"}
+
+
+def test_toggle_with_unmappable_target_is_kept_in_extra_yaml():
+    res = importer.import_yaml(SONOFF_OLD, SECRETS)
+    assert res["ok"], res
+    p = res["project"]
+    out = gen.generate(p, {**WIFI, "ap_password": "hotspot1234"})
+    assert out["ok"], out["errors"]
+    diff = "\n".join(bulk.roundtrip_diff(SONOFF_OLD, out["yaml"]))
+    assert "light.toggle" not in diff, diff  # Aktion darf nicht verloren gehen
+    assert "light.toggle" in out["yaml"]
+
+
+def test_old_style_one_wire_dict_is_not_lost():
+    res = importer.import_yaml(DALLAS_OLD, SECRETS)
+    assert res["ok"], res
+    out = gen.generate(res["project"], {**WIFI, "ap_password": "hotspot1234"})
+    assert out["ok"], out["errors"]
+    assert "one_wire" in out["yaml"] and "dallas_temp" in out["yaml"]
+    diff = "\n".join(bulk.roundtrip_diff(DALLAS_OLD, out["yaml"]))
+    assert "## one_wire" not in diff and "## sensor" not in diff, diff
+
+
+def test_roundtrip_ignores_default_resolution_and_wifi_interval():
+    a = "sensor:\n  - platform: dallas_temp\n    resolution: 12\n  - platform: wifi_signal\n    update_interval: 60s\n"
+    b = "sensor:\n  - platform: dallas_temp\n  - platform: wifi_signal\n"
+    assert bulk.roundtrip_diff(a, b) == []
+    c = "sensor:\n  - platform: dallas_temp\n    resolution: 10\n"
+    assert bulk.roundtrip_diff(c, b)

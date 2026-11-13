@@ -109,7 +109,14 @@ def _plain(obj: Any, ids: frozenset[str] = frozenset()) -> Any:
     if isinstance(obj, Tag):
         return f"{obj.tag} {_plain(obj.value, ids)}"
     if isinstance(obj, dict):
-        return {str(k): _plain(v, ids) for k, v in sorted(obj.items(), key=lambda kv: str(kv[0])) if k != "id"}
+        skip = {"id"}
+        if obj.get("platform") == "dallas_temp" and obj.get("resolution") == 12:
+            skip.add("resolution")  # 12 Bit ist der Standard
+        if obj.get("platform") == "dallas_temp":
+            skip.add("one_wire_id")  # bei einem einzigen Bus ohne Bedeutung
+        if obj.get("platform") in ("wifi_signal", "dallas_temp") and str(obj.get("update_interval")) == "60s":
+            skip.add("update_interval")  # 60 s ist der Standard
+        return {str(k): _plain(v, ids) for k, v in sorted(obj.items(), key=lambda kv: str(kv[0])) if k not in skip}
     if isinstance(obj, list):
         items = [_plain(v, ids) for v in obj]
         return sorted(items, key=lambda v: json.dumps(v, sort_keys=True, ensure_ascii=False, default=str))
@@ -128,6 +135,8 @@ def normalize(text: str) -> dict[str, str]:
     frozen = frozenset(ids)
     out: dict[str, str] = {}
     for key, val in data.items():
+        if key in ("one_wire", "ota") and isinstance(val, dict):  # alte Schreibweise: ein Eintrag statt Liste
+            val = [val]
         out[str(key)] = yaml.safe_dump(_plain(val, frozen), allow_unicode=True, sort_keys=True, default_flow_style=False)
     return out
 
