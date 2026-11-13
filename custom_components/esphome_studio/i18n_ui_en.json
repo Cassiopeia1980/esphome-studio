@@ -182,6 +182,9 @@
   "Home Assistant & Updates": "Home Assistant & updates",
   "Nötig, damit Home Assistant das Gerät findet.": "Needed so Home Assistant can find the device.",
   "API verschlüsseln": "Encrypt API",
+  "Einmalige Umstellung von OTA-Passwort": "One-time switch from OTA password",
+  "Nur für Geräte, die noch mit OTA-Passwort laufen: das Gerät nimmt das nächste Update noch mit dem alten Passwort an und ist danach verschlüsselt. Nach dem erfolgreichen Update ausschalten und neu speichern.": "Only for devices that still run with an OTA password: the device accepts the next update with the old password and is encrypted afterwards. Switch off and save again after the update succeeded.",
+  "Bisheriges OTA-Passwort": "Previous OTA password",
   "API-Schlüssel": "API key",
   "Updates über WLAN (OTA)": "Updates over Wi-Fi (OTA)",
   "Verschlüsselt mit API-Schlüssel (empfohlen, ab ESPHome 2026.9)": "Encrypted with API key (recommended, from ESPHome 2026.9)",
@@ -397,5 +400,8 @@
   "Das Passwort wird wie das WLAN-Passwort einmal gespeichert und im secrets.yaml-Block als „ap_password“ ausgegeben. Nimm mindestens 12 Zeichen, merkbar und nicht dein WLAN-Passwort. Ohne Haken bekommt jedes Gerät ein eigenes.": "The password is stored once, like the WLAN password, and written to the secrets.yaml block as \"ap_password\". Use at least 12 characters, memorable and not your WLAN password. Without the tick each device gets its own.",
   "Hotspot-Passwort (für alle Geräte)": "Hotspot password (for all devices)",
   "Neue Schreibweise für „Zustand nach Neustart“ bei Lichtern (ESPHome ab 2026.10)": "New notation for \"state after restart\" on lights (ESPHome 2026.10 and later)",
-  "Schreibt restore_state statt restore_mode. Braucht ESPHome 2026.10 oder neuer, mit älteren Versionen bricht das Kompilieren ab. Ohne Haken schreibt das Studio das alte restore_mode, das in 2026.10 noch läuft.": "Writes restore_state instead of restore_mode. Needs ESPHome 2026.10 or newer; older versions fail to compile. Without the tick Studio writes the old restore_mode, which still works in 2026.10."
+  "Schreibt restore_state statt restore_mode. Braucht ESPHome 2026.10 oder neuer, mit älteren Versionen bricht das Kompilieren ab. Ohne Haken schreibt das Studio das alte restore_mode, das in 2026.10 noch läuft.": "Writes restore_state instead of restore_mode. Needs ESPHome 2026.10 or newer; older versions fail to compile. Without the tick Studio writes the old restore_mode, which still works in 2026.10.",
+  "Zustände bei Stromausfall behalten (ESP8266)": "Keep states across power loss (ESP8266)",
+  "Automatisch": "Automatic",
+  "Ohne diese Option behält ein ESP8266 gespeicherte Werte (Lichter, Schalter, restore_value) nur bei einem Neustart, nicht bei Stromausfall. „Automatisch“ schaltet sie ein, sobald etwas im Gerät seinen Zustand wiederherstellen soll. Der Flash wird nur beschrieben, wenn sich ein Wert ändert.": "Without this option an ESP8266 keeps stored values (lights, switches, restore_value) only across a reboot, not across a power loss. “Automatic” turns it on as soon as something in the device should restore its state. Flash is only written when a value changes."
 }

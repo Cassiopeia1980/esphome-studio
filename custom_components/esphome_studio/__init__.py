@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .bulk import apply_patch, modernize, roundtrip_diff, undefined_ids, uptime_entity_from_yaml
 from .catalog import catalog
 from .entity import entity_meta
 from .boards import BOARDS, board_detail, boards_meta
@@ -62,7 +63,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not hass.data.get(WS_REGISTERED):
         for handler in (ws_meta, ws_board, ws_catalog, ws_import, ws_list, ws_get, ws_save, ws_delete, ws_new, ws_generate, ws_set_secrets,
-                        ws_random, ws_deploy_settings, ws_deploy, ws_i18n, ws_source_list, ws_source_get, ws_secret_store):
+                        ws_random, ws_deploy_settings, ws_deploy, ws_i18n, ws_source_list, ws_source_get, ws_secret_store,
+                        ws_source_import, ws_project_patch, ws_bulk_patch, ws_check_all, ws_backup_get, ws_backup_restore):
             websocket_api.async_register_command(hass, handler)
         hass.data[WS_REGISTERED] = True
 
@@ -361,6 +363,46 @@ async def ws_deploy_settings(hass, connection, msg):
     connection.send_result(msg["id"], cur)
 
 
+def _file_stem(project: dict[str, Any]) -> str:
+    """Dateiname (ohne .yaml): normalerweise der Gerätename, bei importierten Geräten ggf. der alte Dateiname."""
+    return str(project.get("file_name") or project.get("name") or "")
+
+
+async def _write_yaml(hass, st, name: str, yaml_text: str, secrets_block: str, lg: str) -> dict[str, Any]:
+    """Schreibt eine YAML ins Ziel (Device Builder oder Ordner) und legt eine Sicherung der alten Fassung ab."""
+    cfg = _settings(st)
+    if cfg["dashboard_url"]:
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession  # noqa: PLC0415
+
+        out = await write_to_dashboard(async_get_clientsession(hass), cfg["dashboard_url"], name, yaml_text,
+                                       secrets_block, cfg["dashboard_user"], cfg["dashboard_password"])
+    else:
+        folder = cfg["target_dir"]
+        if not folder:
+            raise DeployError("Kein Ziel eingestellt. Ordner oder Dashboard-Adresse eintragen.")
+        if not hass.config.is_allowed_path(folder):
+            raise DeployError(f"Der Ordner „{folder}“ ist für Home Assistant nicht freigegeben "
+                              "(allowlist_external_dirs). Ordner unterhalb von /config verwenden.")
+        out = await hass.async_add_executor_job(write_to_folder, folder, name, yaml_text, secrets_block, lg)
+    previous = out.get("previous")
+    if isinstance(previous, str) and previous.strip():
+        backups = st["data"].setdefault("backups", {})
+        entry = backups.get(name) or {}
+        backups[name] = {"original": entry.get("original") or previous, "previous": previous,
+                         "time": dt_util.utcnow().isoformat()}
+        await st["store"].async_save(st["data"])
+    return out
+
+
+def _ota_warning(project: dict[str, Any], out: dict[str, Any], lg: str) -> None:
+    ota_mode = (project.get("ota") or {}).get("mode", "encryption")
+    if (ota_mode == "encryption" and project.get("ota", {}).get("enabled", True)
+            and out.get("esphome_version") and version_tuple(out["esphome_version"]) < (2026, 9)):
+        out["warning"] = tr(f"Dein ESPHome ist Version {out['esphome_version']}. Die OTA-Verschlüsselung („ota: encryption“) gibt es erst "
+                            "ab 2026.9. Stelle unter „WLAN, Secrets & Sicherheit“ die OTA-Absicherung auf „Passwort“, "
+                            "sonst meldet ESPHome einen Fehler.", lg)
+
+
 @websocket_api.websocket_command({vol.Required("type"): "esphome_studio/deploy", vol.Optional("lang"): str, vol.Required("project"): dict})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -374,34 +416,16 @@ async def ws_deploy(hass, connection, msg):
     if not res.get("ok"):
         connection.send_error(msg["id"], "invalid", tr("Die Konfiguration hat noch Fehler. Erst beheben, dann speichern.", _lang(msg)))
         return
-    name = str(msg["project"].get("name") or "")
-    cfg = _settings(st)
+    name = _file_stem(msg["project"])
     try:
-        if cfg["dashboard_url"]:
-            from homeassistant.helpers.aiohttp_client import async_get_clientsession  # noqa: PLC0415
-
-            out = await write_to_dashboard(async_get_clientsession(hass), cfg["dashboard_url"], name, res["yaml"],
-                                           res.get("secrets", ""), cfg["dashboard_user"], cfg["dashboard_password"])
-        else:
-            folder = cfg["target_dir"]
-            if not folder:
-                raise DeployError("Kein Ziel eingestellt. Ordner oder Dashboard-Adresse eintragen.")
-            if not hass.config.is_allowed_path(folder):
-                raise DeployError(f"Der Ordner „{folder}“ ist für Home Assistant nicht freigegeben "
-                                  "(allowlist_external_dirs). Ordner unterhalb von /config verwenden.")
-            out = await hass.async_add_executor_job(write_to_folder, folder, name, res["yaml"], res.get("secrets", ""), lg)
+        out = await _write_yaml(hass, st, name, res["yaml"], res.get("secrets", ""), lg)
     except DeployError as exc:
         connection.send_error(msg["id"], "deploy_failed", tr(str(exc), lg))
         return
     except OSError as exc:
         connection.send_error(msg["id"], "deploy_failed", tr(f"Schreiben fehlgeschlagen: {exc.strerror or exc}", lg))
         return
-    ota_mode = (msg["project"].get("ota") or {}).get("mode", "encryption")
-    if (ota_mode == "encryption" and msg["project"].get("ota", {}).get("enabled", True)
-            and out.get("esphome_version") and version_tuple(out["esphome_version"]) < (2026, 9)):
-        out["warning"] = tr(f"Dein ESPHome ist Version {out['esphome_version']}. Die OTA-Verschlüsselung („ota: encryption“) gibt es erst "
-                            "ab 2026.9. Stelle unter „WLAN, Secrets & Sicherheit“ die OTA-Absicherung auf „Passwort“, "
-                            "sonst meldet ESPHome einen Fehler.", lg)
+    _ota_warning(msg["project"], out, lg)
     connection.send_result(msg["id"], out)
 
 
@@ -510,3 +534,334 @@ async def ws_secret_store(hass, connection, msg):
         await st["store"].async_save(data)
     keys = sorted(data.get("secret_store", {}))
     connection.send_result(msg["id"], {"keys": keys, "count": len(keys)})
+
+
+# ------------------------------------------------- Sammel-Umbau bestehender Geräte --
+
+
+def _merged_secrets_text(st: dict[str, Any], secrets_text: str = "") -> str:
+    """Gespeicherter Secrets-Speicher (opt-in) plus eingefügte Zeilen, wie beim Import im Panel."""
+    store = st["data"].get("secret_store") or {}
+    if not store:
+        return secrets_text
+    try:
+        extra = load_text(secrets_text) if secrets_text.strip() else {}
+    except ValueError:
+        return secrets_text
+    merged = dict(store)
+    if isinstance(extra, dict):
+        merged.update(extra)
+    return "".join(f"{k}: {json.dumps(v, ensure_ascii=False)}\n" for k, v in merged.items())
+
+
+async def _load_source(hass, st, conf: str) -> tuple[str, str]:
+    cfg = _settings(st)
+    if cfg["dashboard_url"]:
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession  # noqa: PLC0415
+
+        text = await read_from_dashboard(async_get_clientsession(hass), cfg["dashboard_url"], conf,
+                                         cfg["dashboard_user"], cfg["dashboard_password"])
+        return text, ""
+    folder = cfg["target_dir"]
+    if not folder or not hass.config.is_allowed_path(folder):
+        raise DeployError("Kein erreichbares Ziel eingestellt.")
+
+    def work():
+        text = read_from_folder(folder, conf)
+        return text, read_secrets_from_folder(folder, text)
+
+    return await hass.async_add_executor_job(work)
+
+
+def _project_by_name(st: dict[str, Any], name: str) -> str | None:
+    for pid, p in st["data"]["projects"].items():
+        if str(p.get("name", "")).lower() == name.lower():
+            return pid
+    return None
+
+
+async def _save_project(st: dict[str, Any], project: dict[str, Any], pid: str | None) -> str:
+    projects = st["data"]["projects"]
+    if not pid or pid not in projects:
+        if len(projects) >= MAX_PROJECTS:
+            raise DeployError("Zu viele Projekte gespeichert.")
+        pid = new_password()[:12]
+    project = dict(project)
+    project.pop("id", None)
+    project["updated"] = dt_util.utcnow().isoformat()
+    projects[pid] = project
+    await st["store"].async_save(st["data"])
+    return pid
+
+
+async def _finish_deploy(hass, st, project: dict[str, Any], lg: str, summary: dict[str, Any]) -> None:
+    """Erzeugt die YAML, schreibt sie und trägt das Ergebnis (ohne die lange alte YAML) in ``summary`` ein."""
+    res = generate(project, st["data"]["secrets"], lg)
+    summary["warnings"] = res.get("warnings", [])
+    if not res.get("ok"):
+        summary["deployed"] = False
+        summary["errors"] = res.get("errors", [])
+        return
+    missing = undefined_ids(res["yaml"])
+    if missing:
+        summary["deployed"] = False
+        summary["errors"] = [tr("Das YAML verweist auf IDs, die es nicht gibt: {0}. Nicht geschrieben.", lg).format(", ".join(missing))]
+        return
+    out = await _write_yaml(hass, st, _file_stem(project), res["yaml"], res.get("secrets", ""), lg)
+    out.pop("previous", None)
+    _ota_warning(project, out, lg)
+    summary["deployed"] = True
+    summary.update({k: out[k] for k in ("secrets_added", "secrets_conflicts", "esphome_version", "warning") if k in out})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/source_import",
+    vol.Optional("lang"): str,
+    vol.Required("configuration"): str,
+    vol.Optional("upgrade", default=False): bool,
+    vol.Optional("deploy", default=False): bool,
+    vol.Optional("patch"): dict,
+    vol.Optional("existing", default="replace"): vol.In(["replace", "skip"]),
+    vol.Optional("diff", default=True): bool,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_source_import(hass, connection, msg):
+    """Ein Gerät aus dem Device Builder holen, als Studio-Projekt speichern und auf Wunsch aktualisieren und deployen.
+
+    Mit ``upgrade`` wird die Sicherheit auf den aktuellen Stand gehoben (API/OTA verschlüsselt, einmalige OTA-Umstellung),
+    mit ``patch`` werden einzelne Einstellungen geändert, mit ``deploy`` wird das Ergebnis geschrieben (alte Fassung wird gesichert).
+    """
+    lg = _lang(msg)
+    st = _state(hass, connection, msg["id"], lg)
+    if not st:
+        return
+    conf = msg["configuration"]
+    summary: dict[str, Any] = {"configuration": conf}
+    try:
+        text, secrets_text = await _load_source(hass, st, conf)
+        res = await hass.async_add_executor_job(import_yaml, text, _merged_secrets_text(st, secrets_text), lg, False)
+        summary["notes"] = res.get("notes", [])
+        summary["unmapped"] = res.get("unmapped", [])
+        if not res.get("ok") or not res.get("project"):
+            summary["errors"] = res.get("errors", [])
+            connection.send_result(msg["id"], summary)
+            return
+        project = res["project"]
+        name = str(project.get("name") or "")
+        pid = _project_by_name(st, name)
+        if pid and msg["existing"] == "skip":
+            connection.send_result(msg["id"], {**summary, "skipped": True, "id": pid, "name": name})
+            return
+        summary["name"] = name
+        stem = conf.rsplit(".", 1)[0]
+        if stem != name:
+            project["file_name"] = stem  # Datei heißt anders als das Gerät: beim Deploy dieselbe Datei überschreiben
+            summary["file_name"] = stem
+        if msg["upgrade"]:
+            summary["changes"] = modernize(project)
+        if msg.get("patch"):
+            summary["patch_problems"] = apply_patch(project, msg["patch"])
+        gen = generate(project, st["data"]["secrets"], lg)
+        summary["warnings"] = gen.get("warnings", [])
+        if not gen.get("ok"):
+            summary["errors"] = gen.get("errors", [])
+            connection.send_result(msg["id"], summary)
+            return
+        if msg["diff"]:
+            # Vergleich in der alten Schreibweise von restore_mode, sonst fällt jede Umstellung als Unterschied auf
+            cmp_gen = generate({**project, "restore_state_syntax": False}, st["data"]["secrets"], lg)
+            summary["diff"] = roundtrip_diff(text, cmp_gen.get("yaml") or gen["yaml"])
+        if _clean_project(project) is None:
+            summary["errors"] = ["Das Projekt ist ungültig oder zu groß."]
+            connection.send_result(msg["id"], summary)
+            return
+        summary["id"] = await _save_project(st, project, pid)
+        summary["replaced"] = bool(pid)
+        if (project.get("api") or {}).get("encryption"):
+            summary["api_key"] = project["api"].get("key", "")
+        if msg["deploy"]:
+            await _finish_deploy(hass, st, project, lg, summary)
+    except DeployError as exc:
+        summary["errors"] = [tr(str(exc), lg)]
+    except OSError as exc:
+        summary["errors"] = [tr(f"Lesen oder Schreiben fehlgeschlagen: {exc.strerror or exc}", lg)]
+    connection.send_result(msg["id"], summary)
+
+
+async def _patch_one(hass, st, name: str, patch: dict[str, Any], deploy: bool, lg: str) -> dict[str, Any] | None:
+    """Ändert ein gespeichertes Projekt und deployt es auf Wunsch. ``None``, wenn es das Projekt nicht gibt."""
+    pid = _project_by_name(st, name)
+    if not pid:
+        return None
+    project = json.loads(json.dumps(st["data"]["projects"][pid]))
+    notes: list[str] = []
+    summary: dict[str, Any] = {"id": pid, "name": name}
+    patch = json.loads(json.dumps(patch))
+    restore_names = bool(patch.pop("restore_uptime_names", False))
+    try:
+        summary["patch_problems"] = apply_patch(project, patch, notes)
+        if restore_names:
+            entry = (st["data"].get("backups") or {}).get(_file_stem(project)) or {}
+            info = uptime_entity_from_yaml(entry.get("original") or "") if entry.get("original") else {}
+            if info:
+                project.setdefault("diag_custom", {}).setdefault("uptime", {}).update(info)
+                notes.append(f"Name des Laufzeit-Sensors aus dem Original übernommen: {info['name']}")
+        if notes:
+            summary["notes"] = notes
+        if _clean_project(project) is None:
+            raise DeployError("Das Projekt ist ungültig oder zu groß.")
+        gen = generate(project, st["data"]["secrets"], lg)
+        summary["warnings"] = gen.get("warnings", [])
+        if gen.get("ok"):
+            missing = undefined_ids(gen["yaml"])
+            if missing:
+                summary["errors"] = [tr("Das YAML verweist auf IDs, die es nicht gibt: {0}. Nicht geschrieben.", lg).format(", ".join(missing))]
+        else:
+            summary["errors"] = gen.get("errors", [])
+        if "errors" not in summary:
+            await _save_project(st, project, pid)
+            if deploy:
+                await _finish_deploy(hass, st, project, lg, summary)
+    except ValueError as exc:
+        summary["errors"] = [str(exc)]
+    except DeployError as exc:
+        summary["errors"] = [tr(str(exc), lg)]
+    except OSError as exc:
+        summary["errors"] = [tr(f"Schreiben fehlgeschlagen: {exc.strerror or exc}", lg)]
+    return summary
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/project_patch",
+    vol.Optional("lang"): str,
+    vol.Required("name"): str,
+    vol.Required("patch"): dict,
+    vol.Optional("deploy", default=False): bool,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_project_patch(hass, connection, msg):
+    """Einzelne Einstellungen eines gespeicherten Projekts ändern (Dicts verschmelzen, ``components`` über den Namen).
+
+    ``patch.cleanup: true`` schaltet Web-Server und Debug-Sensoren (bis auf den Reset-Grund) aus und stellt die
+    Betriebszeit auf Text um, auch im Zusatz-YAML.
+    """
+    lg = _lang(msg)
+    st = _state(hass, connection, msg["id"], lg)
+    if not st:
+        return
+    summary = await _patch_one(hass, st, msg["name"], msg["patch"], msg["deploy"], lg)
+    if summary is None:
+        connection.send_error(msg["id"], "not_found", tr("Projekt nicht gefunden.", lg))
+        return
+    connection.send_result(msg["id"], summary)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/bulk_patch",
+    vol.Optional("lang"): str,
+    vol.Required("names"): [str],
+    vol.Required("patch"): dict,
+    vol.Optional("deploy", default=False): bool,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_bulk_patch(hass, connection, msg):
+    """Dieselbe Änderung auf mehrere Projekte anwenden. Liefert je Gerät nur das Wesentliche (Fehler, Hinweise)."""
+    lg = _lang(msg)
+    st = _state(hass, connection, msg["id"], lg)
+    if not st:
+        return
+    results = []
+    for name in msg["names"]:
+        summary = await _patch_one(hass, st, name, msg["patch"], msg["deploy"], lg)
+        if summary is None:
+            results.append({"name": name, "errors": [tr("Projekt nicht gefunden.", lg)]})
+            continue
+        short: dict[str, Any] = {"name": name, "ok": "errors" not in summary and (summary.get("deployed", True))}
+        for k in ("errors", "notes", "patch_problems"):
+            if summary.get(k):
+                short[k] = summary[k]
+        results.append(short)
+    connection.send_result(msg["id"], {"results": results, "failed": [r["name"] for r in results if not r["ok"]]})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/check_all",
+    vol.Optional("lang"): str,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_check_all(hass, connection, msg):
+    """Alle gespeicherten Projekte erzeugen und prüfen (Fehler, Verweise auf fehlende IDs). Liefert nur die auffälligen."""
+    lg = _lang(msg)
+    st = _state(hass, connection, msg["id"], lg)
+    if not st:
+        return
+    problems = []
+    projects = st["data"]["projects"]
+    for pid, project in sorted(projects.items(), key=lambda kv: str(kv[1].get("name"))):
+        res = generate(project, st["data"]["secrets"], lg)
+        issues = list(res.get("errors", [])) if not res.get("ok") else []
+        if res.get("ok"):
+            try:
+                issues += [tr("Verweis auf fehlende ID: {0}", lg).format(i) for i in undefined_ids(res["yaml"])]
+            except ValueError as exc:
+                issues.append(str(exc))
+        if issues:
+            problems.append({"name": project.get("name"), "id": pid, "issues": issues})
+    connection.send_result(msg["id"], {"checked": len(projects), "problems": problems})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/backup_get",
+    vol.Optional("lang"): str,
+    vol.Optional("name"): str,
+    vol.Optional("which", default="original"): vol.In(["original", "previous"]),
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_backup_get(hass, connection, msg):
+    """Ohne ``name``: Liste der gesicherten Geräte. Mit ``name``: die gesicherte YAML (``original`` = vor dem ersten Deploy)."""
+    st = _state(hass, connection, msg["id"], _lang(msg))
+    if not st:
+        return
+    backups = st["data"].get("backups") or {}
+    if "name" not in msg:
+        connection.send_result(msg["id"], {"items": [{"name": n, "time": b.get("time", "")} for n, b in sorted(backups.items())]})
+        return
+    entry = backups.get(msg["name"])
+    if not entry:
+        connection.send_error(msg["id"], "not_found", tr("Keine Sicherung vorhanden.", _lang(msg)))
+        return
+    connection.send_result(msg["id"], {"name": msg["name"], "which": msg["which"], "yaml": entry.get(msg["which"], ""),
+                                       "time": entry.get("time", "")})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/backup_restore",
+    vol.Optional("lang"): str,
+    vol.Required("name"): str,
+    vol.Optional("which", default="original"): vol.In(["original", "previous"]),
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_backup_restore(hass, connection, msg):
+    """Die gesicherte YAML eines Geräts zurück ins Ziel schreiben (Secrets bleiben unangetastet)."""
+    lg = _lang(msg)
+    st = _state(hass, connection, msg["id"], lg)
+    if not st:
+        return
+    entry = (st["data"].get("backups") or {}).get(msg["name"])
+    text = (entry or {}).get(msg["which"], "")
+    if not text:
+        connection.send_error(msg["id"], "not_found", tr("Keine Sicherung vorhanden.", lg))
+        return
+    try:
+        out = await _write_yaml(hass, st, msg["name"], text, "", lg)
+    except DeployError as exc:
+        connection.send_error(msg["id"], "deploy_failed", tr(str(exc), lg))
+        return
+    out.pop("previous", None)
+    connection.send_result(msg["id"], out)

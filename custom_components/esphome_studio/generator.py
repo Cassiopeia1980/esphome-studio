@@ -248,6 +248,7 @@ def default_project(board: str = "d1_mini") -> dict[str, Any]:
         "substitutions": False,
         "flash_mode": "",
         "early_pin_init": "",
+        "restore_from_flash": "",
         "debug_interval": "30s",
         "i2c": dict(b["i2c_default"]),
         "components": [],
@@ -1029,6 +1030,29 @@ def e_generic(ctx: Ctx, c: dict[str, Any]) -> None:
     ctx.add(e["domain"], d)
 
 
+def _keep_id(ctx: Ctx, c: dict[str, Any], before: dict[str, int]) -> None:
+    """Eine beim Import übernommene ``id`` auch dann schreiben, wenn der Baustein selbst keine braucht.
+
+    Zusatz-YAML (Skripte, Lambdas, Automationen) verweist oft auf diese ID. Ohne sie wäre der Verweis ins Leere gelaufen.
+    """
+    iid = c.get("id")
+    if not isinstance(iid, str) or not iid:
+        return
+    if c["type"] == "generic":
+        e = catalog_entry(str(c.get("cat") or ""))
+        if not e or e["domain"] == "hub" or e.get("subs") or e.get("no_id"):
+            return
+        domain = e["domain"]
+    else:
+        meta = ENT_META.get(c["type"])
+        if not meta or any(t["key"] for t in meta["targets"]):
+            return  # mehrere Entitäten in einem Eintrag: eine ID auf Plattformebene wäre ungültig
+        domain = meta["domain"]
+    items = [i for i in ctx.domains.get(domain, [])[before.get(domain, 0):] if isinstance(i, dict)]
+    if len(items) == 1 and "id" not in items[0]:
+        items[0]["id"] = ctx.cid(c)
+
+
 def _profi(ctx: Ctx, c: dict[str, Any], before: dict[str, int]) -> None:
     """Profi-Einstellungen (Name, Icon, Einheit, Filter …) in die gerade erzeugten Entitäten schreiben."""
     ent = (c.get("options") or {}).get("ent")
@@ -1288,6 +1312,7 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
         before = {k: len(v) for k, v in ctx.domains.items()}
         try:
             EMITTERS[c["type"]](ctx, c)
+            _keep_id(ctx, c, before)
             _profi(ctx, c, before)
         except Exception as exc:  # noqa: BLE001 - Eingaben sind frei, Generator darf nie abstürzen
             ctx.err(f"„{c['name']}“: interner Fehler ({exc}).")
@@ -1410,7 +1435,17 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
         ota: dict[str, Any] = {"platform": "esphome"}
         if mode == "encryption":
             if api_p.get("enabled", True) and api_p.get("encryption", True):
-                ota["encryption"] = {}
+                if ota_p.get("migrate"):
+                    # Einmalige Umstellung: das Gerät fragt noch nach dem alten OTA-Passwort (ESPHome ab 2026.10)
+                    pw = str(ota_p.get("password") or "")
+                    if not pw:
+                        ctx.err("Für die einmalige Umstellung auf OTA-Verschlüsselung wird das bisherige OTA-Passwort gebraucht.")
+                    ota["password"] = ctx.secret(f"{dev_slug}_ota_password", pw)
+                    ota["encryption"] = {"allow_plaintext_upload": True}
+                    ctx.warn("Umstellung auf OTA-Verschlüsselung aktiv: nach dem erfolgreichen Update die Option "
+                             "„Einmalige Umstellung“ ausschalten und neu speichern.")
+                else:
+                    ota["encryption"] = {}
             else:
                 ctx.err("OTA-Verschlüsselung nutzt den API-Schlüssel. Entweder die API-Verschlüsselung "
                         "einschalten oder beim OTA „Passwort“ bzw. „Keine Absicherung“ wählen.")
@@ -1530,6 +1565,13 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
             elif extra is not None:
                 ctx.err("Zusatz-YAML: Es muss ein YAML-Abschnitt mit Schlüsseln sein (z. B. „script:“ oder „globals:“).")
 
+    if plat_name == "esp8266" and isinstance(out.get("esp8266"), dict) and "restore_from_flash" not in out["esp8266"]:
+        rff = p.get("restore_from_flash")
+        if rff == "true" or (rff not in ("true", "false") and _needs_flash_restore(out)):
+            out["esp8266"]["restore_from_flash"] = True
+        elif rff == "false":
+            out["esp8266"]["restore_from_flash"] = False
+
     if "substitutions" in out and next(iter(out)) != "substitutions":
         out = {"substitutions": out.pop("substitutions"), **out}
 
@@ -1552,6 +1594,28 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
 
     return {"yaml": yaml_text, "secrets": secrets_text, "warnings": ctx.warnings, "errors": ctx.errors,
             "ok": not ctx.errors}
+
+
+
+def _needs_flash_restore(out: dict[str, Any]) -> bool:
+    """Gibt es im fertigen YAML etwas, das seinen Zustand über einen Stromausfall behalten soll?"""
+    for dom, items in out.items():
+        if not isinstance(items, list):
+            continue
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            if it.get("restore_value") is True:
+                return True
+            rm = str(it.get("restore_mode") or "")
+            if "RESTORE" in rm:
+                return True
+            rs = it.get("restore_state")
+            if rs not in (None, "none", False):
+                return True
+            if dom == "switch" and "restore_mode" not in it and "restore_state" not in it:
+                return True  # ESPHome-Standard bei Schaltern: letzten Zustand wiederherstellen
+    return False
 
 
 def generate(project: dict[str, Any], stored_secrets: dict[str, Any] | None = None, lang: str = "de") -> dict[str, Any]:

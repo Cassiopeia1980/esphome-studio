@@ -1023,7 +1023,9 @@ class ESPHomeStudioPanel extends HTMLElement {
         !this.simple && b?.platform === "esp8266"
           ? this._select("flash_mode", "Flash-Modus (ESP8266)", [["", "Standard"], ["dout", "dout"], ["dio", "dio"], ["qio", "qio"], ["qout", "qout"]], "dout hilft bei manchen Boards, die nach dem Flashen nicht starten.") : null,
         !this.simple && b?.platform === "esp8266"
-          ? this._select("early_pin_init", "Pins früh initialisieren (ESP8266)", [["", "Standard"], ["false", "aus"], ["true", "an"]], "„aus“ verhindert, dass Ausgänge beim Start kurz schalten.") : null),
+          ? this._select("early_pin_init", "Pins früh initialisieren (ESP8266)", [["", "Standard"], ["false", "aus"], ["true", "an"]], "„aus“ verhindert, dass Ausgänge beim Start kurz schalten.") : null,
+        !this.simple && b?.platform === "esp8266"
+          ? this._select("restore_from_flash", "Zustände bei Stromausfall behalten (ESP8266)", [["", "Automatisch"], ["true", "an"], ["false", "aus"]], "Ohne diese Option behält ein ESP8266 gespeicherte Werte (Lichter, Schalter, restore_value) nur bei einem Neustart, nicht bei Stromausfall. „Automatisch“ schaltet sie ein, sobald etwas im Gerät seinen Zustand wiederherstellen soll. Der Flash wird nur beschrieben, wenn sich ein Wert ändert.") : null),
       this.simple ? null : this._check("substitutions", "Platzhalter verwenden (substitutions)",
         "Schreibt Gerätename und Beschreibung oben als devicename und device_description ins YAML und nutzt sie weiter unten."),
       this.simple ? null : h("details", { open: this._extraOpen || !!this.p.extra_yaml, onToggle: (e) => { this._extraOpen = e.target.open; }, style: "margin-top:10px" },
@@ -1103,6 +1105,8 @@ class ESPHomeStudioPanel extends HTMLElement {
         this._check("ota.enabled", "Updates über WLAN (OTA)", "", true),
         this.p.ota.enabled ? this._select("ota.mode", "OTA-Absicherung",
           [["encryption", "Verschlüsselt mit API-Schlüssel (empfohlen, ab ESPHome 2026.9)"], ["password", "Passwort (für ältere ESPHome-Versionen)"], ["none", "Keine"]], "Hast du ESPHome älter als 2026.9 (steht unten im Device Builder), bitte „Passwort“ wählen. Sonst meldet ESPHome „encryption is an invalid option“.", true) : null,
+        this.p.ota.enabled && this.p.ota.mode === "encryption" ? this._check("ota.migrate", "Einmalige Umstellung von OTA-Passwort", "Nur für Geräte, die noch mit OTA-Passwort laufen: das Gerät nimmt das nächste Update noch mit dem alten Passwort an und ist danach verschlüsselt. Nach dem erfolgreichen Update ausschalten und neu speichern.", true) : null,
+        this.p.ota.enabled && this.p.ota.mode === "encryption" && this.p.ota.migrate ? h("div", { class: "grid" }, this._text("ota.password", "Bisheriges OTA-Passwort")) : null,
         this.p.ota.enabled && this.p.ota.mode === "password" ? h("div", { class: "grid" }, this._field("OTA-Passwort",
           h("div", { class: "row" }, h("input", { type: "text", value: this.p.ota.password, readOnly: true }), randomBtn("ota", "ota.password")))) : null,
         h("h3", {}, "Zusätze"),

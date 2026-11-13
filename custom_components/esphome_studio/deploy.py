@@ -76,18 +76,23 @@ def check_name(name: str) -> str:
 
 
 def write_to_folder(folder: str, name: str, yaml_text: str, secrets_block: str, lang: str = "de") -> dict[str, Any]:
-    """Blockierend (im Executor aufrufen)."""
+    """Blockierend (im Executor aufrufen). ``name`` ist der Dateiname ohne ``.yaml`` (bei Geräten mit abweichendem
+    Dateinamen nicht der Gerätename)."""
     check_name(name)
     d = Path(folder)
     if not d.is_dir():
         raise DeployError(f"Der Ordner „{folder}“ existiert nicht. Unter „Ziel“ einen vorhandenen Ordner eintragen.")
     target = d / f"{name}.yaml"
     backup = False
+    previous = ""
     if target.exists():
+        previous = target.read_text(encoding="utf-8")
         target.replace(d / f"{name}.yaml.bak")
         backup = True
     target.write_text(yaml_text, encoding="utf-8")
     result: dict[str, Any] = {"where": str(target), "backup": backup, "secrets_added": [], "secrets_conflicts": []}
+    if previous.strip() and len(previous) <= MAX_YAML:
+        result["previous"] = previous
     if secrets_block.strip():
         sp = d / "secrets.yaml"
         existing = sp.read_text(encoding="utf-8") if sp.exists() else ""

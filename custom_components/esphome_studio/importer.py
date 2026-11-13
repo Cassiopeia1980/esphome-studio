@@ -701,6 +701,13 @@ class _Importer:
         bus_id = item.get("one_wire_id")
         buses = self.cfg.get("one_wire")
         bus = None
+        if bus_id is None and isinstance(buses, list) and len(buses) == 1 and isinstance(buses[0], dict):
+            # ältere Schreibweise: ein Bus ohne ID, der Sensor nennt ihn nicht
+            sensors = self.cfg.get("sensor") if isinstance(self.cfg.get("sensor"), list) else []
+            users = [x for x in sensors if isinstance(x, dict) and x.get("platform") == "dallas_temp"
+                     and x.get("one_wire_id") is None]
+            bus_id = buses[0].setdefault("id", "one_wire_auto")
+            self.refs[bus_id] = len(users)
         if isinstance(buses, list):
             bus = next((b for b in buses if isinstance(b, dict) and b.get("id") == bus_id), None)
         if not bus:
@@ -825,6 +832,11 @@ class _Importer:
                 p["flash_mode"] = fm
             elif fm is not None:
                 pblock["board_flash_mode"] = fm
+            rf = pblock.pop("restore_from_flash", None)
+            if isinstance(rf, bool):
+                p["restore_from_flash"] = "true" if rf else "false"
+            elif rf is not None:
+                pblock["restore_from_flash"] = rf
             ep = pblock.pop("early_pin_init", None)
             if isinstance(ep, bool):
                 p["early_pin_init"] = "true" if ep else "false"
@@ -999,7 +1011,14 @@ class _Importer:
                     it.pop("platform")
                     pw = it.pop("password", None)
                     encr = it.pop("encryption", None)
-                    if pw is not None:
+                    if pw is not None and isinstance(encr, dict) and encr.get("allow_plaintext_upload") and set(encr) <= {"allow_plaintext_upload", "key"}:
+                        # Einmalige Umstellung auf OTA-Verschlüsselung (Passwort noch für den alten Stand)
+                        p["ota"]["mode"] = "encryption"
+                        p["ota"]["migrate"] = True
+                        v = self.val(pw)
+                        if isinstance(v, str) and v:
+                            p["ota"]["password"] = v
+                    elif pw is not None:
                         p["ota"]["mode"] = "password"
                         v = self.val(pw)
                         if isinstance(v, str) and v:
@@ -1206,6 +1225,8 @@ class _Importer:
         all_doms = fixed_doms + tuple(cat_doms)
         for domain in all_doms:
             items = cfg.get(domain)
+            if isinstance(items, dict) and domain in fixed_doms:  # alte Schreibweise: ein Eintrag statt Liste
+                items = cfg[domain] = [items]
             if not isinstance(items, list):
                 continue
             for item in items:
@@ -1228,7 +1249,7 @@ class _Importer:
                         c, tgt = self.binary_sensor(item)
                         comps.append(c)
                         if tgt:
-                            targets.append((c, tgt))
+                            targets.append((c, tgt, item))
                     elif domain == "sensor":
                         self.consume_bus = None
                         c = self.sensor(item)
@@ -1267,19 +1288,23 @@ class _Importer:
         by_id = {c.get("id") or slug(c["name"]): c for c in comps
                  if c["type"] in ("switch", "light_binary", "light_pwm", "light_rgb", "light_rgbw", "light_rgbww",
                                   "light_strip")}
-        for c, tgt in targets:
+        for c, tgt, orig in targets:
             t = by_id.get(tgt)
             follow = self._follow.get(id(c))
             if t is not None and follow:
                 c["options"].update(follow_target=t["uid"], follow_mode=follow, follow_boot=False)
             elif t is not None:
                 c["options"]["toggle_target"] = t["uid"]
-            elif follow:
-                self.note(f"Der Kontakt „{c['name']}“ schaltet „{tgt}“ mit. Das Ziel ist nicht abbildbar; "
-                          "bitte on_press/on_release im Zusatz-YAML ergänzen.")
             else:
-                self.note(f"Der Taster „{c['name']}“ schaltet „{tgt}“ um. Das Ziel ist nicht abbildbar; "
-                          "bitte das Umschalten im Zusatz-YAML ergänzen.")
+                # Ziel nicht abbildbar: Baustein samt Aktion unverändert im Zusatz-YAML lassen, damit nichts verloren geht
+                comps.remove(c)
+                self.extra.setdefault("binary_sensor", []).append(orig)
+                if follow:
+                    self.note(f"Der Kontakt „{c['name']}“ schaltet „{tgt}“ mit. Das Ziel ist nicht abbildbar; der Eintrag "
+                              "bleibt unverändert im Zusatz-YAML.")
+                else:
+                    self.note(f"Der Taster „{c['name']}“ schaltet „{tgt}“ um. Das Ziel ist nicht abbildbar; der Eintrag "
+                              "bleibt unverändert im Zusatz-YAML.")
         if getattr(self, "_boot", None):
             by_bs = {(c.get("id") or slug(c["name"])): c for c in comps
                      if c["type"] == "binary_sensor" and c["options"].get("follow_target")}

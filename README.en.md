@@ -42,8 +42,11 @@ The panel appears in the Home Assistant sidebar (administrators only). The panel
 
 ## Installation
 
-**HACS:** add `https://github.com/Cassiopeia1980/esphome-studio` as a custom repository (category *Integration*),
-download it, restart Home Assistant, then add the integration under *Settings → Devices & services*.
+**Marketplace (Home Assistant 2026.11 and later):** HACS has been replaced by the built-in Marketplace. Integrations installed through HACS stay installed and keep getting updates.
+Open *Settings → Marketplace → Add from link*, paste `https://github.com/Cassiopeia1980/esphome-studio` (Home Assistant asks once for a GitHub device sign-in that only reads public information),
+install **ESPHome Studio**, restart Home Assistant, then add the integration under *Settings → Devices & services*.
+
+**HACS (Home Assistant up to 2026.10):** add the same URL as a custom repository (category *Integration*), download it, restart.
 
 **Manually:** copy `custom_components/esphome_studio` into your `config/custom_components` folder and restart.
 

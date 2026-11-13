@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.17.6
+- `cleanup` schaltet jetzt beide Uptime-Sensoren des Studios an (Laufzeit als Zahl und Betriebszeit als Text) und übernimmt Name, Symbol und Kategorie eines entfernten Zahl-Sensors, damit die Entität in Home Assistant dieselbe bleibt
+- Neu: `patch.restore_uptime_names: true` holt den Namen des früheren sichtbaren Uptime-Sensors aus der ersten Sicherung (Substitutionen aufgelöst); für Geräte, die schon bereinigt wurden
+
+## 0.17.5
+- Fix: `cleanup` behält einen internen Uptime-Sensor, wenn andere Teile ihn per `id(...)` nutzen (z. B. Start-Sperre im Schalter-Lambda); vorher blockierte die ID-Prüfung das Gerät
+
+## 0.17.4
+- Neu: `patch.cleanup: true` bei `esphome_studio/project_patch` räumt die Diagnose auf: Web-Server aus, Debug-Sensoren bis auf den Reset-Grund aus, Betriebszeit nur als Text (Zahl-Laufzeit aus). Auch im Zusatz-YAML werden `web_server`, `uptime`-Sensoren, Debug-Sensoren und alte Lambda-Betriebszeiten entfernt; Name, Symbol und Kategorie der bisherigen Text-Betriebszeit bleiben erhalten, damit die Entität in Home Assistant dieselbe bleibt
+- Neu: `esphome_studio/bulk_patch` wendet dieselbe Änderung auf viele Geräte an und meldet je Gerät nur Fehler und Hinweise
+- `project_patch` speichert und deployt nichts mehr, wenn das erzeugte YAML Fehler oder fehlende IDs hat
+
+## 0.17.3
+- Fix: die ID-Prüfung kennt jetzt aus dem Namen abgeleitete IDs (ESPHome erzeugt `display_brightness` aus „Display Brightness“) und ignoriert Typangaben bei `variables:` von API-Diensten; vorher meldete sie fälschlich fehlende IDs
+
+## 0.17.2
+- Fix: beim Import behält ein abgebildeter Baustein seine `id`, wenn das Zusatz-YAML (Lambda, Skript, Automation) darauf verweist; vorher fehlte die ID im erzeugten YAML und ESPHome meldete einen Fehler
+- Neu: Prüfung auf Verweise auf nicht vorhandene IDs; `source_import`/`project_patch` schreiben solches YAML nicht mehr, neuer Befehl `esphome_studio/check_all` prüft alle gespeicherten Projekte
+
+## 0.17.1
+- Import: eine Taster-Aktion (z. B. `light.toggle`), deren Ziel das Studio nicht abbilden kann, geht nicht mehr verloren; der Taster bleibt unverändert im Zusatz-YAML
+- Import: `one_wire:` in der alten Schreibweise (ein Eintrag statt Liste) und ein DS18B20 ohne `one_wire_id` werden erkannt, statt den Bus zu verwerfen
+- Vergleich beim Umbau ignoriert Standardwerte (`resolution: 12`, `update_interval: 60s`) und die Schreibweise von `one_wire`
+
+## 0.17.0
+- Neu: **einmalige Umstellung auf OTA-Verschlüsselung** (ESPHome ab 2026.10, `allow_plaintext_upload`). Ein Gerät, das noch mit OTA-Passwort läuft, nimmt das nächste Update noch mit dem alten Passwort an und ist danach verschlüsselt, ohne USB-Flash. Option „Einmalige Umstellung von OTA-Passwort“ im Bereich „WLAN, Secrets & Sicherheit“; nach dem erfolgreichen Update ausschalten und neu speichern. Der Import erkennt diesen Zustand
+- Neue Websocket-Befehle zum Umbauen vieler bestehender Geräte (für Automatisierungen und Assistenten):
+  - `esphome_studio/source_import`: holt ein Gerät aus dem Device Builder, speichert es als Projekt und kann es auf Wunsch gleich auf den aktuellen Stand heben (`upgrade`: API und OTA verschlüsseln, mit einmaliger Umstellung), einzelne Einstellungen ändern (`patch`) und deployen (`deploy`). Liefert einen Vergleich zwischen alter und neu erzeugter YAML (ohne umbenannte interne IDs und Reihenfolge), damit Unterschiede auffallen
+  - `esphome_studio/project_patch`: ändert einzelne Einstellungen eines gespeicherten Projekts, Bausteine über ihren Namen
+  - `esphome_studio/backup_get` / `esphome_studio/backup_restore`: Vor jedem Deploy in den Device Builder wird die bisherige YAML gesichert (die allererste Fassung bleibt dauerhaft erhalten) und lässt sich zurückschreiben
+- Deploy: Heißt die Datei im Device Builder anders als das Gerät (z. B. `kellerlicht.yaml` für das Gerät `keller`), schreibt das Studio in dieselbe Datei, statt eine zweite anzulegen
+
+## 0.16.0
+- Neu für ESP8266-Geräte: Option „Zustände bei Stromausfall behalten“ im Bereich „Gerät“ (`esp8266: restore_from_flash`). Ohne sie behält ein ESP8266 gespeicherte Werte (Lichter, Schalter, `restore_value`) nur bei einem Neustart, nicht bei einem Stromausfall. Standard „Automatisch“: das Studio schaltet die Option ein, sobald im fertigen YAML etwas seinen Zustand wiederherstellen soll (Lichter mit `restore_*`, Schalter ohne `restore_mode`, `restore_value: true`, auch im Zusatz-YAML). Der Flash wird nur beschrieben, wenn sich ein Wert ändert
+- Der Import übernimmt ein vorhandenes `restore_from_flash` (an/aus) in diese Option, statt es ins Zusatz-YAML zu legen
+- Geräte, die nichts wiederherstellen, bekommen die Zeile nicht
+
 ## 0.15.1
 - Neue Projekte schreiben bei Lichtern jetzt `restore_state` (ESPHome ab 2026.10). Bestehende, gespeicherte Projekte behalten ihre Schreibweise; der Haken „Neue Schreibweise für „Zustand nach Neustart““ im Bereich „Gerät“ schaltet um. Mit ESPHome 2026.9 oder älter den Haken entfernen
 - Der Import überführt `restore_mode` aus alten YAMLs beim Neuerzeugen in die neue Schreibweise (Haken entfernen, wenn das nicht gewünscht ist)

@@ -169,3 +169,105 @@ async def test_catalog_und_generieren(setup):
                            "options": {"s_temperature": True}}]
     gen = await call(ws, "generate", project=proj)
     assert gen["success"] and "platform: bme680" in gen["result"]["yaml"] and gen["result"]["ok"]
+
+
+OLD_DEVICE = """\
+esphome:
+  name: keller
+  friendly_name: Keller
+
+esp8266:
+  board: d1_mini
+
+logger:
+
+api:
+
+ota:
+  - platform: esphome
+    password: !secret ota
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+light:
+  - platform: monochromatic
+    name: "Lampe"
+    id: lampe
+    output: out1
+    restore_mode: RESTORE_DEFAULT_OFF
+
+output:
+  - platform: esp8266_pwm
+    id: out1
+    pin: GPIO5
+"""
+
+
+@pytest.fixture
+async def folder_target(setup, hass, tmp_path):
+    """Device-Builder-Ordner mit einem Altgerät, dessen Dateiname vom Gerätenamen abweicht."""
+    hass.config.allowlist_external_dirs.add(str(tmp_path))
+    (tmp_path / "kellerlicht.yaml").write_text(OLD_DEVICE, encoding="utf-8")
+    (tmp_path / "secrets.yaml").write_text('ota: "altes-passwort"\nwifi_ssid: "netz"\nwifi_password: "pw12345678"\n',
+                                           encoding="utf-8")
+    _, ws = setup
+    res = await call(ws, "deploy_settings", target_dir=str(tmp_path))
+    assert res["success"]
+    return ws, tmp_path
+
+
+async def test_source_import_upgrade_deploy_backup_and_restore(folder_target):
+    ws, folder = folder_target
+    res = await call(ws, "source_import", configuration="kellerlicht.yaml", upgrade=True, deploy=True,
+                     patch={"components": [{"name": "Lampe", "options": {"restore_mode": "ALWAYS_OFF"}}]})
+    assert res["success"], res
+    r = res["result"]
+    assert "errors" not in r, r
+    assert r["name"] == "keller" and r["file_name"] == "kellerlicht"
+    assert r["deployed"] is True
+    assert "API verschlüsselt" in r["changes"] and any("Umstellung" in c for c in r["changes"])
+    assert len(r["api_key"]) >= 40
+    # Es wird dieselbe Datei überschrieben, keine zweite angelegt
+    assert not (folder / "keller.yaml").exists()
+    new_yaml = (folder / "kellerlicht.yaml").read_text(encoding="utf-8")
+    assert "allow_plaintext_upload: true" in new_yaml
+    assert "restore_from_flash" not in new_yaml  # ALWAYS_OFF braucht keinen Flash
+    assert "keller_api_key" in (folder / "secrets.yaml").read_text(encoding="utf-8")
+    # Das alte Passwort bleibt für die Umstellung als eigenes Secret erhalten
+    assert "keller_ota_password" in (folder / "secrets.yaml").read_text(encoding="utf-8")
+
+    # Sicherung: Liste, Original, Zurückschreiben
+    listing = await call(ws, "backup_get")
+    assert [i["name"] for i in listing["result"]["items"]] == ["kellerlicht"]
+    orig = await call(ws, "backup_get", name="kellerlicht", which="original")
+    assert orig["result"]["yaml"] == OLD_DEVICE
+    back = await call(ws, "backup_restore", name="kellerlicht")
+    assert back["success"], back
+    assert (folder / "kellerlicht.yaml").read_text(encoding="utf-8") == OLD_DEVICE
+
+
+async def test_source_import_skip_existing_and_patch_finalize(folder_target):
+    ws, folder = folder_target
+    first = await call(ws, "source_import", configuration="kellerlicht.yaml", upgrade=True)
+    assert first["result"]["id"]
+    again = await call(ws, "source_import", configuration="kellerlicht.yaml", existing="skip")
+    assert again["result"]["skipped"] is True
+    # Umstellung abschließen: Flag aus, deployen
+    fin = await call(ws, "project_patch", name="keller", patch={"ota": {"migrate": False}}, deploy=True)
+    assert fin["success"] and fin["result"]["deployed"] is True, fin
+    text = (folder / "kellerlicht.yaml").read_text(encoding="utf-8")
+    assert "allow_plaintext_upload" not in text and "encryption: {}" in text
+
+
+async def test_source_import_unknown_file_reports_error(folder_target):
+    ws, _ = folder_target
+    res = await call(ws, "source_import", configuration="gibt-es-nicht.yaml")
+    assert res["success"] and res["result"].get("errors")
+
+
+async def test_backup_restore_without_backup(setup):
+    _, ws = setup
+    res = await call(ws, "backup_restore", name="nichts")
+    assert not res["success"]
