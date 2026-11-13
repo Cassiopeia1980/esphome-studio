@@ -242,26 +242,16 @@ def cleanup_diagnostics(project: dict[str, Any]) -> list[str]:
                 del extra["web_server"]
                 changed = True
                 notes.append("web_server aus dem Zusatz-YAML entfernt")
-            uptime_ids: set[str] = set()
             sensors = extra.get("sensor")
+            uptime_items: list[dict[str, Any]] = []
+            uptime_ids: set[str] = set()
             if isinstance(sensors, list):
-                keep = []
                 for it in sensors:
-                    plat = it.get("platform") if isinstance(it, dict) else None
-                    if plat == "uptime":
+                    if isinstance(it, dict) and it.get("platform") == "uptime":
+                        uptime_items.append(it)
                         if isinstance(it.get("id"), str):
                             uptime_ids.add(it["id"])
-                        uptime_removed = True
-                        changed = True
-                        notes.append(f"Uptime-Sensor „{it.get('name', '')}“ entfernt")
-                        continue
-                    if plat == "debug":
-                        changed = True
-                        notes.append("Debug-Sensoren aus dem Zusatz-YAML entfernt")
-                        continue
-                    keep.append(it)
-                if len(keep) != len(sensors):
-                    extra["sensor"] = keep
+            # Textsensoren: alte Betriebszeit (Plattform uptime oder Lambda über einen Uptime-Sensor) entfernen
             tsens = extra.get("text_sensor")
             if isinstance(tsens, list):
                 keep = []
@@ -285,6 +275,28 @@ def cleanup_diagnostics(project: dict[str, Any]) -> list[str]:
                     keep.append(it)
                 if len(keep) != len(tsens):
                     extra["text_sensor"] = keep
+            # Uptime-Sensoren nur entfernen, wenn nichts anderes auf ihre ID verweist (z. B. Start-Sperre im Schalter)
+            if isinstance(sensors, list):
+                without = [it for it in sensors if not any(it is u for u in uptime_items)]
+                blob = dump_yaml({**extra, "sensor": without}) + json.dumps(project.get("components") or [], default=str)
+                keep = []
+                for it in sensors:
+                    if isinstance(it, dict) and it.get("platform") == "uptime":
+                        iid = it.get("id")
+                        if isinstance(iid, str) and re.search(rf"\bid\(\s*{re.escape(iid)}\s*\)", blob):
+                            keep.append(it)
+                            continue
+                        uptime_removed = True
+                        changed = True
+                        notes.append(f"Uptime-Sensor „{it.get('name', '')}“ entfernt")
+                        continue
+                    if isinstance(it, dict) and it.get("platform") == "debug":
+                        changed = True
+                        notes.append("Debug-Sensoren aus dem Zusatz-YAML entfernt")
+                        continue
+                    keep.append(it)
+                if len(keep) != len(sensors):
+                    extra["sensor"] = keep
             for dom in ("sensor", "text_sensor"):
                 if dom in extra and not extra[dom]:
                     del extra[dom]

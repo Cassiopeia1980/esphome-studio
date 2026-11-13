@@ -369,3 +369,19 @@ def test_cleanup_diagnostics_moves_uptime_to_text_and_keeps_entity_name():
     assert "web_server" not in p["extra_yaml"] and "uptime_s" not in p["extra_yaml"]
     assert "Keep" in p["extra_yaml"] and "foo" not in p["extra_yaml"]
     assert cleanup_diagnostics(p) == []  # idempotent
+
+
+def test_cleanup_keeps_uptime_sensor_that_is_still_referenced():
+    from custom_components.esphome_studio.bulk import cleanup_diagnostics
+    p = {
+        "diag": {},
+        "extra_yaml": (
+            "binary_sensor:\n  - platform: gpio\n    name: S\n    pin: 4\n    on_press:\n      if:\n"
+            "        condition:\n          lambda: 'return id(uptime_s).state > 5;'\n        then:\n          - logger.log: x\n"
+            "sensor:\n  - platform: uptime\n    id: uptime_s\n    internal: true\n"
+            "text_sensor:\n  - platform: uptime\n    name: Betriebszeit\n"),
+    }
+    cleanup_diagnostics(p)
+    assert "uptime_s" in p["extra_yaml"] and "platform: uptime" in p["extra_yaml"]
+    assert "Betriebszeit" not in p["extra_yaml"]
+    assert p["diag"]["uptime_text"] is True

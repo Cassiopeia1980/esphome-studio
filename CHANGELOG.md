@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.17.5
+- Fix: `cleanup` behält einen internen Uptime-Sensor, wenn andere Teile ihn per `id(...)` nutzen (z. B. Start-Sperre im Schalter-Lambda); vorher blockierte die ID-Prüfung das Gerät
+
 ## 0.17.4
 - Neu: `patch.cleanup: true` bei `esphome_studio/project_patch` räumt die Diagnose auf: Web-Server aus, Debug-Sensoren bis auf den Reset-Grund aus, Betriebszeit nur als Text (Zahl-Laufzeit aus). Auch im Zusatz-YAML werden `web_server`, `uptime`-Sensoren, Debug-Sensoren und alte Lambda-Betriebszeiten entfernt; Name, Symbol und Kategorie der bisherigen Text-Betriebszeit bleiben erhalten, damit die Entität in Home Assistant dieselbe bleibt
 - Neu: `esphome_studio/bulk_patch` wendet dieselbe Änderung auf viele Geräte an und meldet je Gerät nur Fehler und Hinweise
