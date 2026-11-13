@@ -445,5 +445,12 @@
   "restore_state nicht abbildbar": "restore_state cannot be mapped",
   "initial_state ohne restore_state nicht abbildbar": "initial_state without restore_state cannot be mapped",
   "restore_state mit einzelnen Feldern nicht abbildbar": "restore_state with individual fields cannot be mapped",
-  "initial_state nicht abbildbar": "initial_state cannot be mapped"
+  "initial_state nicht abbildbar": "initial_state cannot be mapped",
+  "Lesen oder Schreiben fehlgeschlagen: {0}": "Reading or writing failed: {0}",
+  "API verschlüsselt": "API encrypted",
+  "OTA verschlüsselt": "OTA encrypted",
+  "Baustein-Änderung ist kein Objekt.": "Component change is not an object.",
+  "Baustein „{0}“ nicht eindeutig gefunden.": "Component \"{0}\" not found or ambiguous.",
+  "Umstellung auf OTA-Verschlüsselung aktiv: nach dem erfolgreichen Update die Option „Einmalige Umstellung“ ausschalten und neu speichern.": "OTA encryption switch is active: after the update succeeded, turn off the option \"One-time switch\" and save again.",
+  "Für die einmalige Umstellung auf OTA-Verschlüsselung wird das bisherige OTA-Passwort gebraucht.": "The previous OTA password is needed for the one-time switch to OTA encryption."
 }

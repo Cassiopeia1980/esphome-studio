@@ -1004,7 +1004,14 @@ class _Importer:
                     it.pop("platform")
                     pw = it.pop("password", None)
                     encr = it.pop("encryption", None)
-                    if pw is not None:
+                    if pw is not None and isinstance(encr, dict) and encr.get("allow_plaintext_upload") and set(encr) <= {"allow_plaintext_upload", "key"}:
+                        # Einmalige Umstellung auf OTA-Verschlüsselung (Passwort noch für den alten Stand)
+                        p["ota"]["mode"] = "encryption"
+                        p["ota"]["migrate"] = True
+                        v = self.val(pw)
+                        if isinstance(v, str) and v:
+                            p["ota"]["password"] = v
+                    elif pw is not None:
                         p["ota"]["mode"] = "password"
                         v = self.val(pw)
                         if isinstance(v, str) and v:

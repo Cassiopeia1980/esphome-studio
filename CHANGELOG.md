@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.17.0
+- Neu: **einmalige Umstellung auf OTA-Verschlüsselung** (ESPHome ab 2026.10, `allow_plaintext_upload`). Ein Gerät, das noch mit OTA-Passwort läuft, nimmt das nächste Update noch mit dem alten Passwort an und ist danach verschlüsselt, ohne USB-Flash. Option „Einmalige Umstellung von OTA-Passwort“ im Bereich „WLAN, Secrets & Sicherheit“; nach dem erfolgreichen Update ausschalten und neu speichern. Der Import erkennt diesen Zustand
+- Neue Websocket-Befehle zum Umbauen vieler bestehender Geräte (für Automatisierungen und Assistenten):
+  - `esphome_studio/source_import`: holt ein Gerät aus dem Device Builder, speichert es als Projekt und kann es auf Wunsch gleich auf den aktuellen Stand heben (`upgrade`: API und OTA verschlüsseln, mit einmaliger Umstellung), einzelne Einstellungen ändern (`patch`) und deployen (`deploy`). Liefert einen Vergleich zwischen alter und neu erzeugter YAML (ohne umbenannte interne IDs und Reihenfolge), damit Unterschiede auffallen
+  - `esphome_studio/project_patch`: ändert einzelne Einstellungen eines gespeicherten Projekts, Bausteine über ihren Namen
+  - `esphome_studio/backup_get` / `esphome_studio/backup_restore`: Vor jedem Deploy in den Device Builder wird die bisherige YAML gesichert (die allererste Fassung bleibt dauerhaft erhalten) und lässt sich zurückschreiben
+- Deploy: Heißt die Datei im Device Builder anders als das Gerät (z. B. `kellerlicht.yaml` für das Gerät `keller`), schreibt das Studio in dieselbe Datei, statt eine zweite anzulegen
+
 ## 0.16.0
 - Neu für ESP8266-Geräte: Option „Zustände bei Stromausfall behalten“ im Bereich „Gerät“ (`esp8266: restore_from_flash`). Ohne sie behält ein ESP8266 gespeicherte Werte (Lichter, Schalter, `restore_value`) nur bei einem Neustart, nicht bei einem Stromausfall. Standard „Automatisch“: das Studio schaltet die Option ein, sobald im fertigen YAML etwas seinen Zustand wiederherstellen soll (Lichter mit `restore_*`, Schalter ohne `restore_mode`, `restore_value: true`, auch im Zusatz-YAML). Der Flash wird nur beschrieben, wenn sich ein Wert ändert
 - Der Import übernimmt ein vorhandenes `restore_from_flash` (an/aus) in diese Option, statt es ins Zusatz-YAML zu legen

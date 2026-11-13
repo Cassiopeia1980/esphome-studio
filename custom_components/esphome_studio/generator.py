@@ -1411,7 +1411,17 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
         ota: dict[str, Any] = {"platform": "esphome"}
         if mode == "encryption":
             if api_p.get("enabled", True) and api_p.get("encryption", True):
-                ota["encryption"] = {}
+                if ota_p.get("migrate"):
+                    # Einmalige Umstellung: das Gerät fragt noch nach dem alten OTA-Passwort (ESPHome ab 2026.10)
+                    pw = str(ota_p.get("password") or "")
+                    if not pw:
+                        ctx.err("Für die einmalige Umstellung auf OTA-Verschlüsselung wird das bisherige OTA-Passwort gebraucht.")
+                    ota["password"] = ctx.secret(f"{dev_slug}_ota_password", pw)
+                    ota["encryption"] = {"allow_plaintext_upload": True}
+                    ctx.warn("Umstellung auf OTA-Verschlüsselung aktiv: nach dem erfolgreichen Update die Option "
+                             "„Einmalige Umstellung“ ausschalten und neu speichern.")
+                else:
+                    ota["encryption"] = {}
             else:
                 ctx.err("OTA-Verschlüsselung nutzt den API-Schlüssel. Entweder die API-Verschlüsselung "
                         "einschalten oder beim OTA „Passwort“ bzw. „Keine Absicherung“ wählen.")
