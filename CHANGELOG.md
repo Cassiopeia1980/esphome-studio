@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.17.3
+- Fix: die ID-Prüfung kennt jetzt aus dem Namen abgeleitete IDs (ESPHome erzeugt `display_brightness` aus „Display Brightness“) und ignoriert Typangaben bei `variables:` von API-Diensten; vorher meldete sie fälschlich fehlende IDs
+
 ## 0.17.2
 - Fix: beim Import behält ein abgebildeter Baustein seine `id`, wenn das Zusatz-YAML (Lambda, Skript, Automation) darauf verweist; vorher fehlte die ID im erzeugten YAML und ESPHome meldete einen Fehler
 - Neu: Prüfung auf Verweise auf nicht vorhandene IDs; `source_import`/`project_patch` schreiben solches YAML nicht mehr, neuer Befehl `esphome_studio/check_all` prüft alle gespeicherten Projekte

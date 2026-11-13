@@ -336,3 +336,11 @@ def test_undefined_ids_detects_missing_reference():
     assert undefined_ids(ok) == []
     bad = ok.replace("    id: a\n", "")
     assert undefined_ids(bad) == ["a"]
+
+
+def test_undefined_ids_ignores_name_derived_ids_and_service_variables():
+    from custom_components.esphome_studio.bulk import undefined_ids
+    y = ("number:\n  - platform: template\n    name: Display Brightness\n"
+         "api:\n  services:\n    - service: s\n      variables:\n        x: string\n      then:\n"
+         "        - lambda: 'return id(display_brightness).state;'\n")
+    assert undefined_ids(y) == []

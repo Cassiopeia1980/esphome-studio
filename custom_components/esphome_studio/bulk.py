@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from .generator import new_api_key
+from .generator import new_api_key, slug
 from .yamlutil import Tag, load_text
 
 
@@ -177,8 +177,13 @@ def undefined_ids(text: str) -> list[str]:
         if isinstance(obj, Tag):
             return
         if isinstance(obj, dict):
+            nm = obj.get("name")
+            if isinstance(nm, str) and "id" not in obj and "$" not in nm:
+                defined.add(slug(nm))  # ESPHome leitet die ID aus dem Namen ab
             for k, v in obj.items():
                 ks = str(k)
+                if ks == "variables":
+                    continue  # Typangaben von API-Diensten (z. B. „string“), keine Verweise
                 if ks == "id" and isinstance(v, str):
                     defined.add(v)
                 elif isinstance(v, str) and not v.startswith("$") and _IDENT.match(v) and (
