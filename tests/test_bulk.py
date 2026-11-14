@@ -338,12 +338,23 @@ def test_undefined_ids_detects_missing_reference():
     assert undefined_ids(bad) == ["a"]
 
 
-def test_undefined_ids_ignores_name_derived_ids_and_service_variables():
+def test_undefined_ids_ignores_service_variables_but_not_name_derived_ids():
     from custom_components.esphome_studio.bulk import undefined_ids
-    y = ("number:\n  - platform: template\n    name: Display Brightness\n"
-         "api:\n  services:\n    - service: s\n      variables:\n        x: string\n      then:\n"
-         "        - lambda: 'return id(display_brightness).state;'\n")
+    y = ("api:\n  services:\n    - service: s\n      variables:\n        x: string\n      then:\n"
+         "        - lambda: 'return 1;'\n")
     assert undefined_ids(y) == []
+    # ESPHome leitet aus dem Namen keine ansprechbare ID ab (mit esphome config 2026.10.2 geprüft)
+    y = ("number:\n  - platform: template\n    name: Display Brightness\n"
+         "sensor:\n  - platform: template\n    name: x\n    lambda: 'return id(display_brightness).state;'\n")
+    assert undefined_ids(y) == ["display_brightness"]
+
+
+def test_heal_ids_restores_id_of_component_without_one():
+    from custom_components.esphome_studio.bulk import heal_ids
+    p = {"components": [{"name": "Audio ADV"}, {"name": "Power", "id": "power_led"}]}
+    y = "text_sensor:\n  - platform: template\n    name: x\n    lambda: 'return id(audio_adv).state;'\n"
+    assert heal_ids(p, y)
+    assert p["components"][0]["id"] == "audio_adv"
 
 
 def test_cleanup_diagnostics_moves_uptime_to_text_and_keeps_entity_name():

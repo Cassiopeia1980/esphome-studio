@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .bulk import apply_patch, modernize, roundtrip_diff, undefined_ids, uptime_entity_from_yaml
+from .bulk import apply_patch, heal_ids, modernize, roundtrip_diff, undefined_ids, uptime_entity_from_yaml
 from .catalog import catalog
 from .entity import entity_meta
 from .boards import BOARDS, board_detail, boards_meta
@@ -713,6 +713,12 @@ async def _patch_one(hass, st, name: str, patch: dict[str, Any], deploy: bool, l
             raise DeployError("Das Projekt ist ungültig oder zu groß.")
         gen = generate(project, st["data"]["secrets"], lg)
         summary["warnings"] = gen.get("warnings", [])
+        if gen.get("ok") and undefined_ids(gen["yaml"]):
+            healed = heal_ids(project, gen["yaml"])
+            if healed:
+                notes.extend(healed)
+                summary["notes"] = notes
+                gen = generate(project, st["data"]["secrets"], lg)
         if gen.get("ok"):
             missing = undefined_ids(gen["yaml"])
             if missing:

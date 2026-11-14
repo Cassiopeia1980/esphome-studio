@@ -182,9 +182,7 @@ def undefined_ids(text: str) -> list[str]:
         if isinstance(obj, Tag):
             return
         if isinstance(obj, dict):
-            nm = obj.get("name")
-            if isinstance(nm, str) and "id" not in obj and "$" not in nm:
-                defined.add(slug(nm))  # ESPHome leitet die ID aus dem Namen ab
+            # Achtung: ESPHome leitet aus dem Namen KEINE ID ab, auf die man sich verweisen kann. Nur ``id:`` zählt.
             for k, v in obj.items():
                 ks = str(k)
                 if ks == "variables":
@@ -203,6 +201,19 @@ def undefined_ids(text: str) -> list[str]:
 
     walk(data)
     return sorted(refs - defined)
+
+
+def heal_ids(project: dict[str, Any], yaml_text: str) -> list[str]:
+    """Trägt fehlende IDs nach: Verweist das YAML auf eine ID, die genau einem Baustein ohne ID entspricht
+    (``slug(name)``), bekommt dieser Baustein sie wieder. Liefert Meldungen."""
+    notes: list[str] = []
+    comps = [c for c in project.get("components") or [] if isinstance(c, dict)]
+    for miss in undefined_ids(yaml_text):
+        hits = [c for c in comps if not c.get("id") and isinstance(c.get("name"), str) and slug(c["name"]) == miss]
+        if len(hits) == 1:
+            hits[0]["id"] = miss
+            notes.append(f"ID „{miss}“ für „{hits[0]['name']}“ wiederhergestellt")
+    return notes
 
 
 # ------------------------------------------- Diagnose aufräumen (Sammelumbau) --

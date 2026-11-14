@@ -1328,10 +1328,7 @@ class _Importer:
                     c["options"]["follow_boot"] = True
             else:
                 self.extra_set(["esphome", "on_boot"], self._boot_raw)
-        # Komponenten, die eine ID brauchen, behalten ihre ursprüngliche ID
-        for c in comps:
-            if c.get("id") and c["id"] == slug(c["name"]):
-                c.pop("id")
+        # Komponenten behalten ihre ursprüngliche ID (ESPHome leitet aus dem Namen keine ansprechbare ID ab)
 
         # --- Top-Level-Komponenten ---
         sl = cfg.get("status_led")

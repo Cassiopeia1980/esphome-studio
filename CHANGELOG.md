@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.7
+- Fix: ESPHome leitet aus dem Namen keine ansprechbare ID ab (mit `esphome config` 2026.10.2 geprüft). Der Import ließ die ID eines Bausteins weg, wenn sie dem Namen entsprach; Verweise im Zusatz-YAML (z. B. `id(audio_adv)`) liefen dann ins Leere. Der Import behält die ID jetzt immer
+- Die ID-Prüfung (`check_all`, Deploy-Sperre) zählt keine aus dem Namen abgeleiteten IDs mehr als definiert
+- `project_patch`/`bulk_patch` stellen fehlende IDs selbst wieder her, wenn das YAML auf `slug(name)` eines Bausteins ohne ID verweist
+
 ## 0.17.6
 - `cleanup` schaltet jetzt beide Uptime-Sensoren des Studios an (Laufzeit als Zahl und Betriebszeit als Text) und übernimmt Name, Symbol und Kategorie eines entfernten Zahl-Sensors, damit die Entität in Home Assistant dieselbe bleibt
 - Neu: `patch.restore_uptime_names: true` holt den Namen des früheren sichtbaren Uptime-Sensors aus der ersten Sicherung (Substitutionen aufgelöst); für Geräte, die schon bereinigt wurden
