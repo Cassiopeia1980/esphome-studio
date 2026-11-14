@@ -1352,6 +1352,8 @@ def _generate(project: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]
             wifi["manual_ip"] = manual
     if wifi_p.get("min_auth_mode") in ("WPA", "WPA2", "WPA3"):
         wifi["min_auth_mode"] = wifi_p["min_auth_mode"]
+    if wifi_p.get("power_save_mode") in ("NONE", "LIGHT", "HIGH"):
+        wifi["power_save_mode"] = wifi_p["power_save_mode"]
     if wifi_p.get("fallback_ap", True):
         if wifi_p.get("ap_shared"):
             # Ein Passwort für alle Geräte: liegt wie das WLAN-Passwort im Speicher von Home Assistant

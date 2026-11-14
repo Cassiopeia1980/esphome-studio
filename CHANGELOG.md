@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.17.8
+- Neu: `wifi.power_save_mode` (`NONE`, `LIGHT`, `HIGH`) im Projekt, z. B. per `project_patch` `{"wifi": {"power_save_mode": "NONE"}}`
+
 ## 0.17.7
 - Fix: ESPHome leitet aus dem Namen keine ansprechbare ID ab (mit `esphome config` 2026.10.2 geprüft). Der Import ließ die ID eines Bausteins weg, wenn sie dem Namen entsprach; Verweise im Zusatz-YAML (z. B. `id(audio_adv)`) liefen dann ins Leere. Der Import behält die ID jetzt immer
 - Die ID-Prüfung (`check_all`, Deploy-Sperre) zählt keine aus dem Namen abgeleiteten IDs mehr als definiert

@@ -405,3 +405,12 @@ def test_uptime_entity_from_yaml_resolves_substitutions_and_skips_internal():
          "  - platform: uptime\n    name: \"${friendly_name} Uptime\"\n    icon: mdi:x\n")
     assert uptime_entity_from_yaml(y) == {"name": "Kammer Uptime", "icon": "mdi:x"}
     assert uptime_entity_from_yaml("sensor:\n  - platform: uptime\n    internal: true\n") == {}
+
+
+def test_wifi_power_save_mode_is_generated():
+    from custom_components.esphome_studio.generator import default_project, generate
+    p = default_project()
+    p["name"] = "t"
+    p["wifi"]["power_save_mode"] = "NONE"
+    res = generate(p, {"wifi_ssid": "a", "wifi_password": "bbbbbbbb", "ap_password": "cccccccc"}, "de")
+    assert "power_save_mode: \"NONE\"" in res["yaml"]
