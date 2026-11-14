@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .bulk import apply_patch, heal_ids, modernize, roundtrip_diff, undefined_ids, uptime_entity_from_yaml
+from .bulk import apply_patch, duplicate_names, heal_ids, modernize, roundtrip_diff, undefined_ids, uptime_entity_from_yaml
 from .catalog import catalog
 from .entity import entity_meta
 from .boards import BOARDS, board_detail, boards_meta
@@ -602,6 +602,11 @@ async def _finish_deploy(hass, st, project: dict[str, Any], lg: str, summary: di
         summary["deployed"] = False
         summary["errors"] = res.get("errors", [])
         return
+    dups = duplicate_names(res["yaml"])
+    if dups:
+        summary["deployed"] = False
+        summary["errors"] = [tr("Doppelte Entitätsnamen: {0}. Nicht geschrieben.", lg).format(", ".join(dups))]
+        return
     missing = undefined_ids(res["yaml"])
     if missing:
         summary["deployed"] = False
@@ -721,7 +726,10 @@ async def _patch_one(hass, st, name: str, patch: dict[str, Any], deploy: bool, l
                 gen = generate(project, st["data"]["secrets"], lg)
         if gen.get("ok"):
             missing = undefined_ids(gen["yaml"])
-            if missing:
+            dups = duplicate_names(gen["yaml"])
+            if dups:
+                summary["errors"] = [tr("Doppelte Entitätsnamen: {0}. Nicht geschrieben.", lg).format(", ".join(dups))]
+            elif missing:
                 summary["errors"] = [tr("Das YAML verweist auf IDs, die es nicht gibt: {0}. Nicht geschrieben.", lg).format(", ".join(missing))]
         else:
             summary["errors"] = gen.get("errors", [])
@@ -813,6 +821,7 @@ async def ws_check_all(hass, connection, msg):
         if res.get("ok"):
             try:
                 issues += [tr("Verweis auf fehlende ID: {0}", lg).format(i) for i in undefined_ids(res["yaml"])]
+                issues += [tr("Doppelter Entitätsname: {0}", lg).format(i) for i in duplicate_names(res["yaml"])]
             except ValueError as exc:
                 issues.append(str(exc))
         if issues:

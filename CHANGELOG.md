@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.9
+- Fix: `cleanup` entfernt auch importierte Uptime-Bausteine (Zahl und Text), sonst gab es zwei Sensoren „Betriebszeit“ und ESPHome brach ab; Name und Symbol gehen an die Studio-Laufzeit
+- Neu: Prüfung auf doppelte Entitätsnamen (gleiche Domain und Plattform) in `check_all`, `project_patch`/`bulk_patch` und beim Deploy
+
 ## 0.17.8
 - Neu: `wifi.power_save_mode` (`NONE`, `LIGHT`, `HIGH`) im Projekt, z. B. per `project_patch` `{"wifi": {"power_save_mode": "NONE"}}`
 

@@ -456,6 +456,9 @@
   "Das YAML verweist auf IDs, die es nicht gibt: {0}. Nicht geschrieben.": "The YAML refers to IDs that do not exist: {0}. Not written.",
   "Verweis auf fehlende ID: {0}": "Reference to missing ID: {0}",
   "ID „{0}“ für „{1}“ wiederhergestellt": "ID “{0}” restored for “{1}”",
+  "Doppelte Entitätsnamen: {0}. Nicht geschrieben.": "Duplicate entity names: {0}. Not written.",
+  "Doppelter Entitätsname: {0}": "Duplicate entity name: {0}",
+  "Uptime-Baustein „{0}“ in die Studio-Laufzeit übernommen": "Uptime block “{0}” merged into the Studio uptime",
   "Name des Laufzeit-Sensors aus dem Original übernommen: {0}": "Uptime sensor name taken from the original: {0}",
   "Uptime-Sensor „{0}“ in die Studio-Laufzeit übernommen": "Uptime sensor \"{0}\" taken over by the Studio uptime"
 }

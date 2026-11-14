@@ -203,6 +203,24 @@ def undefined_ids(text: str) -> list[str]:
     return sorted(refs - defined)
 
 
+def duplicate_names(text: str) -> list[str]:
+    """Doppelte Entitätsnamen innerhalb derselben Domain und Plattform (ESPHome lehnt das ab)."""
+    data = load_text(text) or {}
+    seen: dict[tuple[str, str, str], int] = {}
+    if isinstance(data, dict):
+        for dom, items in data.items():
+            if not isinstance(items, list):
+                continue
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                nm, plat = it.get("name"), it.get("platform")
+                if isinstance(nm, str) and isinstance(plat, str) and "$" not in nm:
+                    key = (str(dom), plat, nm.strip().lower())
+                    seen[key] = seen.get(key, 0) + 1
+    return sorted(f"{d}.{pl}: {n}" for (d, pl, n), c in seen.items() if c > 1)
+
+
 def heal_ids(project: dict[str, Any], yaml_text: str) -> list[str]:
     """Trägt fehlende IDs nach: Verweist das YAML auf eine ID, die genau einem Baustein ohne ID entspricht
     (``slug(name)``), bekommt dieser Baustein sie wieder. Liefert Meldungen."""
@@ -241,6 +259,21 @@ def cleanup_diagnostics(project: dict[str, Any]) -> list[str]:
             notes.append("Debug-Sensor aus (" + k + ")")
     if had_debug:
         diag["debug_reset"] = True
+
+    # Importierte Uptime-Bausteine (Zahl oder Text) ersetzt die Studio-Diagnose; Name und Symbol wandern in diag_custom
+    kept = []
+    for c in project.get("components") or []:
+        cat = c.get("cat") if isinstance(c, dict) else None
+        if cat in ("uptime.text_sensor", "uptime.sensor"):
+            key = "uptime_text" if cat == "uptime.text_sensor" else "uptime"
+            cust = project.setdefault("diag_custom", {}).setdefault(key, {})
+            if c.get("name"):
+                cust["name"] = c["name"]
+            notes.append(f"Uptime-Baustein „{c.get('name')}“ in die Studio-Laufzeit übernommen")
+            continue
+        kept.append(c)
+    if len(kept) != len(project.get("components") or []):
+        project["components"] = kept
 
     uptime_removed = False
     numeric_info: dict[str, Any] = {}

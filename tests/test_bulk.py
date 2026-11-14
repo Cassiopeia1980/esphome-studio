@@ -414,3 +414,15 @@ def test_wifi_power_save_mode_is_generated():
     p["wifi"]["power_save_mode"] = "NONE"
     res = generate(p, {"wifi_ssid": "a", "wifi_password": "bbbbbbbb", "ap_password": "cccccccc"}, "de")
     assert "power_save_mode: \"NONE\"" in res["yaml"]
+
+
+def test_duplicate_names_and_uptime_component_cleanup():
+    from custom_components.esphome_studio.bulk import cleanup_diagnostics, duplicate_names
+    y = ("text_sensor:\n  - platform: uptime\n    name: Betriebszeit\n  - platform: uptime\n    name: betriebszeit\n"
+         "  - platform: version\n    name: Betriebszeit\n")
+    assert duplicate_names(y) == ["text_sensor.uptime: betriebszeit"]
+    p = {"diag": {}, "components": [{"name": "Betriebszeit", "cat": "uptime.text_sensor", "type": "generic"},
+                                    {"name": "x", "type": "gpio"}]}
+    notes = cleanup_diagnostics(p)
+    assert [c["name"] for c in p["components"]] == ["x"]
+    assert p["diag"]["uptime_text"] is True and any("Betriebszeit" in n for n in notes)
