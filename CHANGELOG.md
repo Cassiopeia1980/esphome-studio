@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.17.10
+- `check_all` meldet Geräte, bei denen OTA aus ist (der Device Builder kann sie dann nicht per Funk flashen, z. B. wenn das Original nur über den Web-Server aktualisiert wurde)
+
 ## 0.17.9
 - Fix: `cleanup` entfernt auch importierte Uptime-Bausteine (Zahl und Text), sonst gab es zwei Sensoren „Betriebszeit“ und ESPHome brach ab; Name und Symbol gehen an die Studio-Laufzeit
 - Neu: Prüfung auf doppelte Entitätsnamen (gleiche Domain und Plattform) in `check_all`, `project_patch`/`bulk_patch` und beim Deploy

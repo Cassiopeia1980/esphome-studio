@@ -818,6 +818,8 @@ async def ws_check_all(hass, connection, msg):
     for pid, project in sorted(projects.items(), key=lambda kv: str(kv[1].get("name"))):
         res = generate(project, st["data"]["secrets"], lg)
         issues = list(res.get("errors", [])) if not res.get("ok") else []
+        if not (project.get("ota") or {}).get("enabled", True):
+            issues.append(tr("OTA ist aus: der Device Builder kann dieses Gerät nicht per Funk aktualisieren.", lg))
         if res.get("ok"):
             try:
                 issues += [tr("Verweis auf fehlende ID: {0}", lg).format(i) for i in undefined_ids(res["yaml"])]
