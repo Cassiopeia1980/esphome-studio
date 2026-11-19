@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.17.11
+- Kompatibel mit ESPHome 2026.11: Board-Generator an die neue ESP32PinSpec-API angepasst (behebt das fehlgeschlagene monatliche Daten-Update), Boards- und Baustein-Katalog neu erzeugt (u. a. neue Bausteine wie ds3231, duco, ld2410s, usb_audio, hdmi_cec).
+
 ## 0.17.10
 - `check_all` meldet Geräte, bei denen OTA aus ist (der Device Builder kann sie dann nicht per Funk flashen, z. B. wenn das Original nur über den Web-Server aktualisiert wurde)
 

@@ -119,9 +119,13 @@ def build_esp32_chip(variant: str):
                                CONF_PULLDOWN, CONF_PULLUP)
     modname = "gpio_esp32" if variant == "ESP32" else "gpio_esp32_" + variant[5:].lower()
     mod = importlib.import_module(f"esphome.components.esp32.{modname}")
-    validate_pin = next(getattr(mod, n) for n in dir(mod) if n.endswith("_validate_gpio_pin"))
-    validate_sup = next(getattr(mod, n) for n in dir(mod) if n.endswith("_validate_supports"))
-    strapping = next((getattr(mod, n) for n in dir(mod) if n.endswith("STRAPPING_PINS")), set())
+    spec = next((getattr(mod, n) for n in dir(mod) if n.endswith("_PIN_SPEC")), None)
+    if spec is not None:  # ESPHome ab 2026.11: ein ESP32PinSpec-Objekt je Variante
+        validate_pin, validate_sup, strapping = spec.validate_gpio_pin, spec.validate_supports, set(spec.strapping_pins)
+    else:  # ältere ESPHome-Versionen: Funktionen im Modul
+        validate_pin = next(getattr(mod, n) for n in dir(mod) if n.endswith("_validate_gpio_pin"))
+        validate_sup = next(getattr(mod, n) for n in dir(mod) if n.endswith("_validate_supports"))
+        strapping = next((getattr(mod, n) for n in dir(mod) if n.endswith("STRAPPING_PINS")), set())
     psram_octal = next((getattr(mod, n) for n in dir(mod) if "R8_PSRAM" in n), {})
     adc1 = getattr(adc_mod, "ESP32_VARIANT_ADC1_PIN_TO_CHANNEL", {}).get(variant, {})
     adc2 = getattr(adc_mod, "ESP32_VARIANT_ADC2_PIN_TO_CHANNEL", {}).get(variant, {})
