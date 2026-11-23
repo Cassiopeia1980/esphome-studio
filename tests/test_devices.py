@@ -24,10 +24,12 @@ def test_rows():
         "b": {"name": "alt", "board": "esp32dev"},
         "c": {"name": "fehlt"},
     }
-    ha = {"lampe": {"sw_version": "2026.10.2 (x)", "online": True}, "alt": {"sw_version": "2026.11.0 (y)", "online": False}}
+    projects["d"] = {"name": "acepro1", "friendly_name": "ACE Pro 1"}
+    ha = {dv.norm("ACE Pro 1"): {"sw_version": "2026.11.0", "online": True}, "lampe": {"sw_version": "2026.10.2 (x)", "online": True}, "alt": {"sw_version": "2026.11.0 (y)", "online": False}}
     out = dv.device_rows(projects, ha)
     assert out["latest"] == "2026.11.0"
     rows = {r["name"]: r for r in out["devices"]}
     assert rows["Lampe"]["outdated"] and rows["Lampe"]["migrate_open"] and rows["Lampe"]["ip"] == "192.168.3.5"
     assert not rows["alt"]["outdated"] and rows["alt"]["online"] is False
     assert not rows["fehlt"]["in_ha"]
+    assert rows["acepro1"]["in_ha"]

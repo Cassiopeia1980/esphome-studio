@@ -8,6 +8,11 @@ from typing import Any
 _VERSION_RE = re.compile(r"(\d+)\.(\d+)(?:\.(\d+))?(b\d+)?")
 
 
+def norm(name: str) -> str:
+    """Namen vergleichbar machen: klein, ohne Leer-, Binde-, Unterstriche und Sonderzeichen."""
+    return re.sub(r"[^0-9a-zäöüß]", "", str(name or "").lower())
+
+
 def parse_version(sw: str) -> tuple[int, int, int] | None:
     """'2026.11.0 (Nov 23 2026, 12:00:00)' -> (2026, 11, 0); ``None``, wenn keine Version erkennbar ist."""
     m = _VERSION_RE.search(sw or "")
@@ -39,7 +44,7 @@ def device_rows(projects: dict[str, dict[str, Any]], ha_devices: dict[str, dict[
     rows = []
     for pid, p in projects.items():
         name = str(p.get("name", ""))
-        dev = ha_devices.get(name.lower()) or {}
+        dev = ha_devices.get(norm(name)) or ha_devices.get(norm(p.get("friendly_name", ""))) or {}
         sw = str(dev.get("sw_version", ""))
         v = parse_version(sw)
         ota = p.get("ota") or {}

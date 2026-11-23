@@ -35,7 +35,7 @@ from .generator import default_project, generate, new_ap_password, new_api_key, 
 from .deploy import (DEFAULT_DIR, DeployError, list_from_dashboard, list_from_folder, read_from_dashboard,
                      read_from_folder, read_secrets_from_folder, version_tuple, write_to_dashboard, write_to_folder)
 from .i18n import LANGS, tr, tr_struct, ui_dictionary, use_lang
-from .devices import device_rows
+from .devices import device_rows, norm
 from .importer import import_yaml
 from .yamlutil import load_text
 
@@ -895,12 +895,14 @@ def _ha_esphome_devices(hass) -> dict[str, dict[str, Any]]:
     dreg, ereg = dr.async_get(hass), er.async_get(hass)
     out: dict[str, dict[str, Any]] = {}
     for entry in hass.config_entries.async_entries("esphome"):
-        name = str(entry.title or "").lower()
         for dev in dr.async_entries_for_config_entry(dreg, entry.entry_id):
             states = [hass.states.get(e.entity_id) for e in er.async_entries_for_device(ereg, dev.id)]
             states = [s for s in states if s is not None]
             online = any(s.state not in ("unavailable",) for s in states) if states else None
-            out[name] = {"sw_version": dev.sw_version or "", "online": online}
+            info = {"sw_version": dev.sw_version or "", "online": online}
+            for key in (entry.title, dev.name, dev.name_by_user):
+                if key:
+                    out.setdefault(norm(key), info)
             break
     return out
 

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.18.1
+- Fix: Startseite fand viele Geräte in Home Assistant nicht (dort heißen sie oft wie der Anzeigename, z. B. „ACE Pro 1“); Abgleich jetzt über Gerätename und Anzeigename, unabhängig von Groß-/Kleinschreibung und Trennzeichen. Fix: Kopfzeile zeigte „null“.
+
 ## 0.18.0
 - Neu: Startseite mit Gerätekacheln (Name, Board, IP, ESPHome-Firmware und Online-Status aus Home Assistant, Änderungsdatum, Anzahl Bausteine), Suche und Filtern (Umstellung offen, Firmware älter als aktuell, Offline, nicht in Home Assistant); Aktionen Öffnen, Duplizieren, Im Builder öffnen, Löschen. Über „☰ Übersicht“ kommt man aus dem Editor zurück.
 - Neu: „Aus Builder neu einlesen“ – liest alle YAMLs aus dem Device Builder neu ein, zeigt zuerst eine Vorschau (neu / geändert / unverändert / Fehler) und fragt vor dem Ersetzen nach; der alte Stand wird gesichert. Optional werden Projekte entfernt, die es nur im Studio gibt. WS-Befehle `esphome_studio/devices` und `esphome_studio/sync_all` (ohne `confirm` nur Vorschau).

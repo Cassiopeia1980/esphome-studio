@@ -752,7 +752,7 @@ class ESPHomeStudioPanel extends HTMLElement {
   _buildHead() {
     if (!this._head) return;
     this._head.replaceChildren(this._menu, h("div", { class: "title" }, "ESPHome Studio"), h("span", { class: "ver" }, `v${this.meta?.version || ""}`),
-      !this._home && this.projects.length ? h("button", { title: "Zur Geräteübersicht", onClick: () => this._goHome() }, "☰ Übersicht") : null,
+      !this._home && this.projects.length ? h("button", { title: "Zur Geräteübersicht", onClick: () => this._goHome() }, "☰ Übersicht") : "",
       h("label", { class: "mode", title: "Der einfache Modus zeigt nur das Wichtigste. Profi-Optionen sind dann ausgeblendet." },
         this._modeBox = h("input", { type: "checkbox", checked: this.simple, onChange: (e) => this._setSimple(e.target.checked) }), "Einfacher Modus"),
       h("label", { class: "mode lang", title: "Sprache / Language" }, "🌐 ",
