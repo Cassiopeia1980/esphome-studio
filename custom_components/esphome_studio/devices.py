@@ -10,7 +10,7 @@ _VERSION_RE = re.compile(r"(\d+)\.(\d+)(?:\.(\d+))?(b\d+)?")
 
 def norm(name: str) -> str:
     """Namen vergleichbar machen: klein, ohne Leer-, Binde-, Unterstriche und Sonderzeichen."""
-    return re.sub(r"[^0-9a-zäöüß]", "", str(name or "").lower())
+    return re.sub(r"[\W_]", "", str(name or "").lower())
 
 
 def parse_version(sw: str) -> tuple[int, int, int] | None:
