@@ -66,6 +66,24 @@ const CSS = `
   .layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--es-gap);
             padding: var(--es-gap); max-width: 1700px; margin: 0 auto; align-items: start; }
   @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } .out { position: static !important; } }
+  .layout.home { grid-template-columns: minmax(0, 1fr); }
+  .layout.home .out { display: none; }
+  .home-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .home-tools input[type=search] { flex: 1; min-width: 180px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { cursor: pointer; border: 1px solid var(--divider-color, #ccc); border-radius: 16px; padding: 3px 12px; font-size: 13px;
+          background: transparent; color: inherit; }
+  .chip.on { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--es-gap); }
+  .dcard { border: 1px solid var(--divider-color, #ddd); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px;
+           background: var(--card-background-color, #fff); cursor: pointer; }
+  .dcard:hover { border-color: var(--primary-color); }
+  .dcard .nm { font-weight: 500; font-size: 15px; word-break: break-all; }
+  .dcard .meta { font-size: 12px; color: var(--secondary-text-color); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .dcard .act { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .dcard .act button { padding: 2px 8px; font-size: 12px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #9e9e9e; margin-right: 4px; }
+  .dot.on { background: #43a047; } .dot.off { background: #e53935; }
   .col { display: flex; flex-direction: column; gap: var(--es-gap); min-width: 0; }
   .card { background: var(--card-background-color, #fff); border-radius: var(--ha-card-border-radius, 12px);
           box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); padding: 16px; min-width: 0; }
@@ -222,6 +240,7 @@ class ESPHomeStudioPanel extends HTMLElement {
     this.out = { yaml: "", secrets: "", warnings: [], errors: [], ok: true };
     this.tab = "yaml";
     this.fatal = "";
+    this._home = false; this._homeData = null; this._homeQ = ""; this._homeFilter = "all"; this._sync = null;
     this._seq = 0;
     this._narrow = false;
     this._showPw = false;
@@ -256,7 +275,7 @@ class ESPHomeStudioPanel extends HTMLElement {
       const c = await this._ws("catalog");
       this.catalog = { ...c, byId: Object.fromEntries(c.entries.map((e) => [e.id, e])) };
       this.boardCache = {};
-      await this._ensureBoard(this.p.board);
+      if (this.p) await this._ensureBoard(this.p.board);
     } catch { /* alte Daten bleiben */ }
     this._buildHead();
     this._renderAll();
@@ -294,7 +313,7 @@ class ESPHomeStudioPanel extends HTMLElement {
         if (this.p) this._renderAll();
       }).catch(() => {});
       await this._reloadList();
-      if (this.projects.length) await this._open(this.projects[0].id, true);
+      if (this.projects.length) { this._home = true; this._buildHead(); this._loadHome(); }
       else await this._newProject();
     } catch (err) {
       this.fatal = tx("ESPHome Studio konnte nicht starten:") + ` ${err?.message || JSON.stringify(err)}`;
@@ -344,8 +363,8 @@ class ESPHomeStudioPanel extends HTMLElement {
     if (!confirm(tx(`Projekt „${this.p.name}“ wirklich löschen?`))) return;
     await this._ws("delete", { project_id: this.pid });
     await this._reloadList();
-    if (this.projects.length) await this._open(this.projects[0].id, true);
-    else await this._newProject();
+    if (this.projects.length) { this._setHome(true); return; }
+    await this._newProject();
     this._renderAll();
     this._generate();
   }
@@ -406,6 +425,8 @@ class ESPHomeStudioPanel extends HTMLElement {
       await this._ensureBoard(this.p.board);
       this.dirty = true;
       this._wizardOff = true;
+      this._home = false;
+      this._buildHead();
       this._renderAll();
       this._generate();
       this._toast("Projekt geladen. Neue Schlüssel wurden erzeugt, bitte speichern.");
@@ -442,6 +463,7 @@ class ESPHomeStudioPanel extends HTMLElement {
 
   _generate() {
     clearTimeout(this._genTimer);
+    if (!this.p || this._home) return;
     this._genTimer = setTimeout(async () => {
       const seq = ++this._seq;
       try {
@@ -576,9 +598,161 @@ class ESPHomeStudioPanel extends HTMLElement {
     else this._left.append(h("div", { class: "card" }, this.fatal || "Lade …"));
   }
 
+  // ------------------------------------------------------- Startseite ---
+  _setHome(v) {
+    this._home = v;
+    this._buildHead();
+    this._renderAll();
+    if (v) this._loadHome(); else this._generate();
+  }
+
+  async _goHome() {
+    if (this.dirty && !confirm(tx("Es gibt nicht gespeicherte Änderungen. Trotzdem zur Übersicht wechseln?"))) return;
+    await this._reloadList();
+    this._setHome(true);
+  }
+
+  async _loadHome() {
+    try { this._homeData = await this._ws("devices"); this._homeErr = ""; }
+    catch (err) { this._homeErr = err?.message || tx("Fehler"); }
+    if (this._home) this._renderAll();
+  }
+
+  async _homeOpen(id) {
+    await this._open(id, true);
+    this._setHome(false);
+  }
+
+  async _homeNew() {
+    await this._newProject();
+    this._setHome(false);
+  }
+
+  async _homeDuplicate(id) {
+    await this._open(id, true);
+    this._home = false;
+    this._buildHead();
+    await this._duplicate();
+  }
+
+  async _homeDelete(d) {
+    if (!confirm(tx(`Projekt „${d.name}“ wirklich löschen?`))) return;
+    await this._ws("delete", { project_id: d.id });
+    if (this.pid === d.id) { this.pid = null; this.p = null; }
+    await this._reloadList();
+    if (!this.projects.length) { await this._homeNew(); return; }
+    this._loadHome();
+  }
+
+  _homeFiltered() {
+    const q = this._homeQ.trim().toLowerCase();
+    return (this._homeData?.devices || []).filter((d) => {
+      if (q && !`${d.name} ${d.friendly_name} ${d.board} ${d.ip}`.toLowerCase().includes(q)) return false;
+      if (this._homeFilter === "migrate") return d.migrate_open;
+      if (this._homeFilter === "outdated") return d.outdated;
+      if (this._homeFilter === "offline") return d.in_ha && d.online === false;
+      if (this._homeFilter === "noha") return !d.in_ha;
+      return true;
+    });
+  }
+
+  _secHome() {
+    const data = this._homeData;
+    const list = data ? this._homeFiltered() : [];
+    const all = data?.devices || [];
+    const cnt = {
+      all: all.length, migrate: all.filter((d) => d.migrate_open).length, outdated: all.filter((d) => d.outdated).length,
+      offline: all.filter((d) => d.in_ha && d.online === false).length, noha: all.filter((d) => !d.in_ha).length,
+    };
+    const chip = (key, label) => h("button", { class: `chip ${this._homeFilter === key ? "on" : ""}`,
+      onClick: () => { this._homeFilter = key; this._renderAll(); } }, `${tx(label)} (${cnt[key]})`);
+    const search = h("input", { type: "search", placeholder: "Suchen nach Name, Board oder IP …", value: this._homeQ, autocomplete: "off",
+      onInput: (e) => { this._homeQ = e.target.value; clearTimeout(this._homeT); this._homeT = setTimeout(() => this._renderAll(), 200); } });
+    const top = h("div", { class: "card" },
+      h("h2", {}, "Geräte", data?.latest ? h("span", { class: "badge ok" }, `ESPHome ${data.latest}`) : null),
+      h("div", { class: "home-tools" }, search,
+        h("button", { class: "primary", onClick: () => this._homeNew() }, "Neues Projekt"),
+        h("button", { onClick: () => this._projFile.click() }, "Datei importieren"),
+        h("button", { title: "Alle Geräte neu aus dem ESPHome Device Builder einlesen", onClick: () => this._syncOpen() }, "Aus Builder neu einlesen"),
+        this._projFile = h("input", { type: "file", accept: ".json,application/json", style: "display:none",
+          onChange: async (e) => { await this._importProjectFile(e.target.files[0]); e.target.value = ""; } })),
+      h("div", { class: "chips", style: "margin-top:10px" }, chip("all", "Alle"), chip("migrate", "Umstellung offen"),
+        chip("outdated", "Firmware älter als aktuell"), chip("offline", "Offline"), chip("noha", "Nicht in Home Assistant")));
+    if (this._homeErr) return [top, h("div", { class: "card" }, this._homeErr)];
+    if (!data) return [top, h("div", { class: "card" }, "Lade …")];
+    const cards = list.map((d) => h("div", { class: "dcard", onClick: () => this._homeOpen(d.id) },
+      h("div", { class: "nm" }, h("span", { class: `dot ${d.online === true ? "on" : d.online === false ? "off" : ""}`,
+        title: d.online === true ? "Online" : d.online === false ? "Offline" : "Nicht in Home Assistant" }), d.name),
+      d.friendly_name ? h("div", { class: "meta" }, d.friendly_name) : null,
+      h("div", { class: "meta" }, h("span", {}, d.board || "?"), d.ip ? h("span", {}, d.ip) : null,
+        h("span", {}, `${d.components} ${tx("Komponenten")}`)),
+      h("div", { class: "meta" },
+        d.version ? h("span", { class: d.outdated ? "badge warn" : "badge ok" }, `ESPHome ${d.version}`) : h("span", {}, "Firmware unbekannt"),
+        d.migrate_open ? h("span", { class: "badge warn" }, "Umstellung offen") : null),
+      h("div", { class: "meta" }, d.updated ? `${tx("Geändert")}: ${new Date(d.updated).toLocaleString(I18N.lang === "de" ? "de-DE" : "en-GB")}` : ""),
+      h("div", { class: "act", onClick: (e) => e.stopPropagation() },
+        h("button", { onClick: () => this._homeOpen(d.id) }, "Öffnen"),
+        h("button", { onClick: () => this._homeDuplicate(d.id) }, "Duplizieren"),
+        data.builder_url ? h("a", { href: data.builder_url, target: "_blank", rel: "noopener" }, h("button", {}, "Im Builder öffnen")) : null,
+        h("button", { class: "danger", onClick: () => this._homeDelete(d) }, "Löschen"))));
+    return [this._sync ? this._secSync() : null, top,
+      list.length ? h("div", { class: "cards" }, cards) : h("div", { class: "card" }, "Keine Geräte gefunden.")].filter(Boolean);
+  }
+
+  // --- Alles neu aus dem Device Builder einlesen ---
+  async _syncOpen() {
+    this._sync = { busy: true, removeMissing: false };
+    this._renderAll();
+    try { this._sync.res = await this._ws("sync_all", {}); }
+    catch (err) { this._sync.error = err?.message || tx("Fehler"); }
+    this._sync.busy = false;
+    this._renderAll();
+  }
+
+  async _syncRun() {
+    const s = this._sync;
+    const c = s.res.counts;
+    const extra = s.removeMissing ? ` ${tx("Außerdem werden")} ${s.res.only_in_studio.length} ${tx("Projekte entfernt, die es nur im Studio gibt.")}` : "";
+    if (!confirm(`${tx("Wirklich alles neu aus dem Device Builder einlesen?")}\n\n${c.new} ${tx("neu")}, ${c.changed} ${tx("geändert")}. ` +
+      `${tx("Der bisherige Studio-Stand dieser Projekte wird ersetzt (eine Sicherung wird abgelegt).")}${extra}`)) return;
+    s.busy = true; this._renderAll();
+    try {
+      s.done = await this._ws("sync_all", { confirm: true, remove_missing: s.removeMissing });
+      await this._reloadList();
+      this.p = null; this.pid = null; this.dirty = false;
+      await this._loadHome();
+    } catch (err) { s.error = err?.message || tx("Fehler"); }
+    s.busy = false;
+    this._renderAll();
+  }
+
+  _secSync() {
+    const s = this._sync;
+    const close = h("button", { onClick: () => { this._sync = null; this._renderAll(); } }, "Schließen");
+    if (s.busy) return h("div", { class: "card" }, h("h2", {}, "Aus Builder neu einlesen"), "Lese die Geräte aus dem Device Builder …");
+    if (s.error) return h("div", { class: "card" }, h("h2", {}, "Aus Builder neu einlesen"), h("p", {}, s.error), close);
+    const r = s.done || s.res;
+    const c = r.counts;
+    const status = { new: "neu", changed: "geändert", error: "Fehler" };
+    const rows = r.items.filter((i) => i.status !== "same").map((i) => h("li", {},
+      h("b", {}, i.name || i.configuration), ` – ${tx(status[i.status])}`, i.errors ? `: ${i.errors.join(" ")}` : ""));
+    return h("div", { class: "card" },
+      h("h2", {}, "Aus Builder neu einlesen"),
+      h("p", {}, `${c.new} ${tx("neu")}, ${c.changed} ${tx("geändert")}, ${c.same} ${tx("unverändert")}, ${c.error} ${tx("Fehler")}.`),
+      rows.length ? h("ul", { style: "max-height:260px;overflow:auto" }, rows) : null,
+      r.only_in_studio.length ? h("p", { class: "hint" }, `${tx("Nur im Studio, nicht im Builder")}: ${r.only_in_studio.map((o) => o.name).join(", ")}`) : null,
+      s.done ? h("p", {}, h("b", {}, `${tx("Fertig.")} ${s.done.backed_up} ${tx("alte Projektstände gesichert.")}`)) : null,
+      h("div", { class: "row" },
+        !s.done && r.only_in_studio.length ? h("label", {}, h("input", { type: "checkbox", checked: s.removeMissing,
+          onChange: (e) => { s.removeMissing = e.target.checked; this._renderAll(); } }), " Projekte entfernen, die es nur im Studio gibt") : null,
+        !s.done && (c.new || c.changed || s.removeMissing) ? h("button", { class: "danger", onClick: () => this._syncRun() }, "Jetzt einlesen …") : null,
+        close));
+  }
+
   _buildHead() {
     if (!this._head) return;
     this._head.replaceChildren(this._menu, h("div", { class: "title" }, "ESPHome Studio"), h("span", { class: "ver" }, `v${this.meta?.version || ""}`),
+      !this._home && this.projects.length ? h("button", { title: "Zur Geräteübersicht", onClick: () => this._goHome() }, "☰ Übersicht") : null,
       h("label", { class: "mode", title: "Der einfache Modus zeigt nur das Wichtigste. Profi-Optionen sind dann ausgeblendet." },
         this._modeBox = h("input", { type: "checkbox", checked: this.simple, onChange: (e) => this._setSimple(e.target.checked) }), "Einfacher Modus"),
       h("label", { class: "mode lang", title: "Sprache / Language" }, "🌐 ",
@@ -599,10 +773,17 @@ class ESPHomeStudioPanel extends HTMLElement {
     const scroll = this.scrollTop;
     this._head.querySelector(".ver").textContent = `v${this.meta?.version || ""}`;
     this._left.replaceChildren();
+    this._layout.classList.toggle("home", !!this._home);
     if (this.fatal) {
       this._left.append(h("div", { class: "card" }, this.fatal));
       return;
     }
+    if (this._home) {
+      this._left.append(...this._secHome());
+      this.scrollTop = scroll;
+      return;
+    }
+    if (!this.p) return;
     this._left.append(...[this._secWizard(), this._secProject(), this._importOpen ? this._secImport() : null, this._importReport ? this._secReport() : null,
       this._secDevice(), this._secNetwork(), this.simple ? null : this._secPins(), this._secComponents(), this._secNext()].filter(Boolean));
     this._renderOutput();

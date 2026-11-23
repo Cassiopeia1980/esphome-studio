@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.0
+- Neu: Startseite mit Gerätekacheln (Name, Board, IP, ESPHome-Firmware und Online-Status aus Home Assistant, Änderungsdatum, Anzahl Bausteine), Suche und Filtern (Umstellung offen, Firmware älter als aktuell, Offline, nicht in Home Assistant); Aktionen Öffnen, Duplizieren, Im Builder öffnen, Löschen. Über „☰ Übersicht“ kommt man aus dem Editor zurück.
+- Neu: „Aus Builder neu einlesen“ – liest alle YAMLs aus dem Device Builder neu ein, zeigt zuerst eine Vorschau (neu / geändert / unverändert / Fehler) und fragt vor dem Ersetzen nach; der alte Stand wird gesichert. Optional werden Projekte entfernt, die es nur im Studio gibt. WS-Befehle `esphome_studio/devices` und `esphome_studio/sync_all` (ohne `confirm` nur Vorschau).
+
 ## 0.17.11
 - Kompatibel mit ESPHome 2026.11: Board-Generator an die neue ESP32PinSpec-API angepasst (behebt das fehlgeschlagene monatliche Daten-Update), Boards- und Baustein-Katalog neu erzeugt (u. a. neue Bausteine wie ds3231, duco, ld2410s, usb_audio, hdmi_cec).
 

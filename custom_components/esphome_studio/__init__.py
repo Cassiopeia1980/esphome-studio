@@ -35,6 +35,7 @@ from .generator import default_project, generate, new_ap_password, new_api_key, 
 from .deploy import (DEFAULT_DIR, DeployError, list_from_dashboard, list_from_folder, read_from_dashboard,
                      read_from_folder, read_secrets_from_folder, version_tuple, write_to_dashboard, write_to_folder)
 from .i18n import LANGS, tr, tr_struct, ui_dictionary, use_lang
+from .devices import device_rows
 from .importer import import_yaml
 from .yamlutil import load_text
 
@@ -64,7 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data.get(WS_REGISTERED):
         for handler in (ws_meta, ws_board, ws_catalog, ws_import, ws_list, ws_get, ws_save, ws_delete, ws_new, ws_generate, ws_set_secrets,
                         ws_random, ws_deploy_settings, ws_deploy, ws_i18n, ws_source_list, ws_source_get, ws_secret_store,
-                        ws_source_import, ws_project_patch, ws_bulk_patch, ws_check_all, ws_backup_get, ws_backup_restore):
+                        ws_source_import, ws_project_patch, ws_bulk_patch, ws_check_all, ws_backup_get, ws_backup_restore, ws_devices, ws_sync_all):
             websocket_api.async_register_command(hass, handler)
         hass.data[WS_REGISTERED] = True
 
@@ -882,3 +883,158 @@ async def ws_backup_restore(hass, connection, msg):
         return
     out.pop("previous", None)
     connection.send_result(msg["id"], out)
+
+
+# ------------------------------------------------------------------ Startseite --
+
+
+def _ha_esphome_devices(hass) -> dict[str, dict[str, Any]]:
+    """ESPHome-Geräte aus der HA-Geräteliste: Name (klein) -> Firmware und Online-Status."""
+    from homeassistant.helpers import device_registry as dr, entity_registry as er  # noqa: PLC0415
+
+    dreg, ereg = dr.async_get(hass), er.async_get(hass)
+    out: dict[str, dict[str, Any]] = {}
+    for entry in hass.config_entries.async_entries("esphome"):
+        name = str(entry.title or "").lower()
+        for dev in dr.async_entries_for_config_entry(dreg, entry.entry_id):
+            states = [hass.states.get(e.entity_id) for e in er.async_entries_for_device(ereg, dev.id)]
+            states = [s for s in states if s is not None]
+            online = any(s.state not in ("unavailable",) for s in states) if states else None
+            out[name] = {"sw_version": dev.sw_version or "", "online": online}
+            break
+    return out
+
+
+@websocket_api.websocket_command({vol.Required("type"): "esphome_studio/devices", vol.Optional("lang"): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_devices(hass, connection, msg):
+    """Alle Projekte für die Startseite, ergänzt um Firmware-Version und Online-Status aus Home Assistant."""
+    st = _state(hass, connection, msg["id"], _lang(msg))
+    if not st:
+        return
+    out = device_rows(st["data"]["projects"], _ha_esphome_devices(hass))
+    cfg = _settings(st)
+    out["builder_url"] = cfg.get("dashboard_url", "")
+    connection.send_result(msg["id"], out)
+
+
+def _strip_volatile(p: dict[str, Any]) -> str:
+    return json.dumps({k: v for k, v in p.items() if k != "updated"}, sort_keys=True, ensure_ascii=False)
+
+
+async def _sync_read(hass, st, conf: str, lg: str) -> dict[str, Any]:
+    """Eine Builder-YAML einlesen, ohne etwas zu speichern."""
+    item: dict[str, Any] = {"configuration": conf}
+    try:
+        text, secrets_text = await _load_source(hass, st, conf)
+        res = await hass.async_add_executor_job(import_yaml, text, _merged_secrets_text(st, secrets_text), lg, False)
+        if not res.get("ok") or not res.get("project"):
+            item["errors"] = res.get("errors") or [tr("Import fehlgeschlagen.", lg)]
+            return item
+        project = res["project"]
+        stem = conf.rsplit(".", 1)[0]
+        if stem != str(project.get("name") or ""):
+            project["file_name"] = stem
+        item["name"] = str(project.get("name") or "")
+        item["project"] = project
+        item["unmapped"] = len(res.get("unmapped") or [])
+    except DeployError as exc:
+        item["errors"] = [tr(str(exc), lg)]
+    except (OSError, UnicodeDecodeError) as exc:
+        item["errors"] = [tr(f"Lesen fehlgeschlagen: {getattr(exc, 'strerror', None) or exc}", lg)]
+    return item
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "esphome_studio/sync_all",
+    vol.Optional("lang"): str,
+    vol.Optional("confirm", default=False): bool,
+    vol.Optional("remove_missing", default=False): bool,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_sync_all(hass, connection, msg):
+    """Alles neu aus dem Device Builder einlesen, damit das Studio dem Stand des Builders entspricht.
+
+    Ohne ``confirm`` nur Vorschau (neu / geändert / unverändert / Fehler). Mit ``confirm`` werden die Projekte ersetzt;
+    der vorherige Stand der ersetzten und entfernten Projekte wird in ``sync_backup`` abgelegt.
+    """
+    import asyncio  # noqa: PLC0415
+
+    lg = _lang(msg)
+    st = _state(hass, connection, msg["id"], lg)
+    if not st:
+        return
+    got = await _source_call(
+        hass, connection, msg, lg,
+        lambda sess, c: list_from_dashboard(sess, c["dashboard_url"], c["dashboard_user"], c["dashboard_password"]),
+        list_from_folder)
+    if not got:
+        return
+    confs = sorted({str(i.get("configuration")) for i in got[2] if i.get("configuration")})
+    sem = asyncio.Semaphore(6)
+
+    async def one(conf):
+        async with sem:
+            return await _sync_read(hass, st, conf, lg)
+
+    items = await asyncio.gather(*(one(c) for c in confs))
+    projects = st["data"]["projects"]
+    rows, seen = [], set()
+    for it in items:
+        row = {"configuration": it["configuration"], "name": it.get("name", "")}
+        if "errors" in it:
+            row.update(status="error", errors=it["errors"])
+        else:
+            name = it["name"]
+            if name.lower() in seen:
+                row.update(status="error", errors=[tr("Doppelter Gerätename im Builder.", lg)])
+                rows.append(row)
+                continue
+            seen.add(name.lower())
+            pid = _project_by_name(st, name)
+            if not pid:
+                row["status"] = "new"
+            elif _strip_volatile({**projects[pid]}) == _strip_volatile({**it["project"]}):
+                row["status"] = "same"
+            else:
+                row["status"] = "changed"
+            row["_pid"], row["_project"] = pid, it["project"]
+        rows.append(row)
+    only_studio = [{"id": pid, "name": p.get("name", "")} for pid, p in projects.items()
+                   if str(p.get("name", "")).lower() not in seen]
+    counts = {k: sum(1 for r in rows if r["status"] == k) for k in ("new", "changed", "same", "error")}
+    result: dict[str, Any] = {"counts": counts, "only_in_studio": only_studio, "confirmed": bool(msg["confirm"])}
+    if msg["confirm"]:
+        backup: dict[str, Any] = {}
+        for r in rows:
+            if r["status"] not in ("new", "changed"):
+                continue
+            pid, project = r["_pid"], r["_project"]
+            if _clean_project(project) is None:
+                r.update(status="error", errors=[tr("Das Projekt ist ungültig oder zu groß.", lg)])
+                counts["error"] += 1
+                counts[("new" if not pid else "changed")] -= 1
+                continue
+            if pid:
+                backup[pid] = projects[pid]
+            elif len(projects) >= MAX_PROJECTS:
+                r.update(status="error", errors=[tr("Zu viele Projekte gespeichert.", lg)])
+                continue
+            else:
+                pid = new_password()[:12]
+            project = dict(project)
+            project["updated"] = dt_util.utcnow().isoformat()
+            projects[pid] = project
+        if msg["remove_missing"]:
+            for o in only_studio:
+                if o["id"] in projects:
+                    backup[o["id"]] = projects.pop(o["id"])
+        if backup:
+            st["data"]["sync_backup"] = {"time": dt_util.utcnow().isoformat(), "projects": backup}
+        await st["store"].async_save(st["data"])
+        result["backed_up"] = len(backup)
+        result["removed"] = len(only_studio) if msg["remove_missing"] else 0
+    result["items"] = [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows]
+    connection.send_result(msg["id"], result)
