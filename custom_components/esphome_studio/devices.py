@@ -51,6 +51,7 @@ def device_rows(projects: dict[str, dict[str, Any]], ha_devices: dict[str, dict[
         rows.append({
             "id": pid,
             "name": name,
+            "file": str(p.get("file_name") or name),
             "friendly_name": p.get("friendly_name", ""),
             "board": p.get("board", ""),
             "updated": p.get("updated", ""),

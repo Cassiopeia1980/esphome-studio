@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.18.2
+- Fix: „Im Builder öffnen“ springt jetzt direkt zum Gerät (`/device/<Datei>.yaml`).
+
 ## 0.18.1
 - Fix: Startseite fand viele Geräte in Home Assistant nicht (dort heißen sie oft wie der Anzeigename, z. B. „ACE Pro 1“); Abgleich jetzt über Gerätename und Anzeigename, unabhängig von Groß-/Kleinschreibung und Trennzeichen. Fix: Kopfzeile zeigte „null“.
 

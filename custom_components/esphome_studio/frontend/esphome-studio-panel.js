@@ -693,7 +693,7 @@ class ESPHomeStudioPanel extends HTMLElement {
       h("div", { class: "act", onClick: (e) => e.stopPropagation() },
         h("button", { onClick: () => this._homeOpen(d.id) }, "Öffnen"),
         h("button", { onClick: () => this._homeDuplicate(d.id) }, "Duplizieren"),
-        data.builder_url ? h("a", { href: data.builder_url, target: "_blank", rel: "noopener" }, h("button", {}, "Im Builder öffnen")) : null,
+        data.builder_url ? h("a", { href: `${data.builder_url.replace(/\/+$/, "")}/device/${encodeURIComponent(d.file || d.name)}.yaml`, target: "_blank", rel: "noopener" }, h("button", {}, "Im Builder öffnen")) : null,
         h("button", { class: "danger", onClick: () => this._homeDelete(d) }, "Löschen"))));
     return [this._sync ? this._secSync() : null, top,
       list.length ? h("div", { class: "cards" }, cards) : h("div", { class: "card" }, "Keine Geräte gefunden.")].filter(Boolean);
