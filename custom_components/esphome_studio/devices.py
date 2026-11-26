@@ -66,3 +66,22 @@ def device_rows(projects: dict[str, dict[str, Any]], ha_devices: dict[str, dict[
         })
     rows.sort(key=lambda r: r["name"].lower())
     return {"devices": rows, "latest": latest}
+
+
+def keep_api_key(new: dict, *olds: dict | None) -> bool:
+    """Fehlt im neu eingelesenen Projekt der API-Schlüssel (Builder liefert keine secrets.yaml), den alten übernehmen.
+
+    Nimmt den ersten brauchbaren Schlüssel (mindestens 40 Zeichen) aus ``olds``. Gibt True zurück, wenn einer
+    übernommen wurde.
+    """
+    api = new.get("api")
+    if not isinstance(api, dict) or not api.get("encryption", True):
+        return False
+    if len(str(api.get("key") or "")) >= 40:
+        return False
+    for old in olds:
+        key = str(((old or {}).get("api") or {}).get("key") or "")
+        if len(key) >= 40:
+            api["key"] = key
+            return True
+    return False

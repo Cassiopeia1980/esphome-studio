@@ -35,7 +35,7 @@ from .generator import default_project, generate, new_ap_password, new_api_key, 
 from .deploy import (DEFAULT_DIR, DeployError, list_from_dashboard, list_from_folder, read_from_dashboard,
                      read_from_folder, read_secrets_from_folder, version_tuple, write_to_dashboard, write_to_folder)
 from .i18n import LANGS, tr, tr_struct, ui_dictionary, use_lang
-from .devices import device_rows, norm
+from .devices import device_rows, keep_api_key, norm
 from .importer import import_yaml
 from .yamlutil import load_text
 
@@ -921,6 +921,10 @@ async def ws_devices(hass, connection, msg):
     connection.send_result(msg["id"], out)
 
 
+def _has_key(p: dict[str, Any]) -> bool:
+    return len(str((p.get("api") or {}).get("key") or "")) >= 40
+
+
 def _strip_volatile(p: dict[str, Any]) -> str:
     return json.dumps({k: v for k, v in p.items() if k != "updated"}, sort_keys=True, ensure_ascii=False)
 
@@ -983,6 +987,7 @@ async def ws_sync_all(hass, connection, msg):
 
     items = await asyncio.gather(*(one(c) for c in confs))
     projects = st["data"]["projects"]
+    old_backup = (st["data"].get("sync_backup") or {}).get("projects") or {}
     rows, seen = [], set()
     for it in items:
         row = {"configuration": it["configuration"], "name": it.get("name", "")}
@@ -996,6 +1001,8 @@ async def ws_sync_all(hass, connection, msg):
                 continue
             seen.add(name.lower())
             pid = _project_by_name(st, name)
+            if pid and keep_api_key(it["project"], projects[pid], old_backup.get(pid)):
+                row["key_kept"] = True
             if not pid:
                 row["status"] = "new"
             elif _strip_volatile({**projects[pid]}) == _strip_volatile({**it["project"]}):
@@ -1009,7 +1016,7 @@ async def ws_sync_all(hass, connection, msg):
     counts = {k: sum(1 for r in rows if r["status"] == k) for k in ("new", "changed", "same", "error")}
     result: dict[str, Any] = {"counts": counts, "only_in_studio": only_studio, "confirmed": bool(msg["confirm"])}
     if msg["confirm"]:
-        backup: dict[str, Any] = {}
+        backup: dict[str, Any] = dict(old_backup)
         for r in rows:
             if r["status"] not in ("new", "changed"):
                 continue
@@ -1020,7 +1027,9 @@ async def ws_sync_all(hass, connection, msg):
                 counts[("new" if not pid else "changed")] -= 1
                 continue
             if pid:
-                backup[pid] = projects[pid]
+                prev, older = projects[pid], old_backup.get(pid)
+                # Ein Stand ohne API-Schlüssel darf den älteren, brauchbaren Sicherungsstand nicht verdrängen.
+                backup[pid] = older if older and not _has_key(prev) and _has_key(older) else prev
             elif len(projects) >= MAX_PROJECTS:
                 r.update(status="error", errors=[tr("Zu viele Projekte gespeichert.", lg)])
                 continue

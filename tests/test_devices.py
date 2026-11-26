@@ -33,3 +33,17 @@ def test_rows():
     assert not rows["alt"]["outdated"] and rows["alt"]["online"] is False
     assert not rows["fehlt"]["in_ha"]
     assert rows["acepro1"]["in_ha"]
+
+
+def test_keep_api_key():
+    key = "A" * 44
+    new = {"api": {"encryption": True, "key": ""}}
+    assert dv.keep_api_key(new, {"api": {"key": ""}}, {"api": {"key": key}})
+    assert new["api"]["key"] == key
+    # vorhandener Schluessel bleibt, ohne Verschluesselung wird nichts ergaenzt
+    other = {"api": {"encryption": True, "key": "B" * 44}}
+    assert not dv.keep_api_key(other, {"api": {"key": key}})
+    assert other["api"]["key"] == "B" * 44
+    plain = {"api": {"encryption": False, "key": ""}}
+    assert not dv.keep_api_key(plain, {"api": {"key": key}})
+    assert not dv.keep_api_key({"api": {"encryption": True, "key": ""}}, None, {})

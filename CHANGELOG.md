@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.18.3
+- Fix: „Aus Builder neu einlesen“ löschte die API-Schlüssel aller Projekte. Der Device Builder liefert die `secrets.yaml` nicht mit, die Schlüssel ließen sich aus `!secret` nicht auflösen. Jetzt bleibt der vorhandene Schlüssel erhalten oder wird aus dem letzten Sicherungsstand übernommen; ein Stand ohne Schlüssel verdrängt den brauchbaren Sicherungsstand nicht mehr.
+
 ## 0.18.2
 - Fix: „Im Builder öffnen“ springt jetzt direkt zum Gerät (`/device/<Datei>.yaml`).
 
