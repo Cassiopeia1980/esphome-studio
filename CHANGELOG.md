@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.4
+- Fix: Auch der Einzel-Import aus dem Builder behält den vorhandenen API-Schlüssel.
+- Neu: Startseite hat den Knopf „secrets.yaml einfügen“; die secrets.yaml lässt sich so von Hand ins Studio kopieren (Secrets-Speicher) und wird beim Einlesen genutzt.
+
 ## 0.18.3
 - Fix: „Aus Builder neu einlesen“ löschte die API-Schlüssel aller Projekte. Der Device Builder liefert die `secrets.yaml` nicht mit, die Schlüssel ließen sich aus `!secret` nicht auflösen. Jetzt bleibt der vorhandene Schlüssel erhalten oder wird aus dem letzten Sicherungsstand übernommen; ein Stand ohne Schlüssel verdrängt den brauchbaren Sicherungsstand nicht mehr.
 

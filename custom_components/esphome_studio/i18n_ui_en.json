@@ -438,5 +438,7 @@
   "Fertig.": "Done.",
   "alte Projektstände gesichert.": "old project states backed up.",
   "Projekte entfernen, die es nur im Studio gibt": "Remove projects that exist only in the Studio",
-  "Jetzt einlesen …": "Read in now …"
+  "Jetzt einlesen …": "Read in now …",
+  "secrets.yaml einfügen": "Paste secrets.yaml",
+  "secrets.yaml einmal ins Studio kopieren, damit Schlüssel und Passwörter beim Einlesen ergänzt werden": "Copy secrets.yaml into the Studio once so keys and passwords are filled in on import"
 }

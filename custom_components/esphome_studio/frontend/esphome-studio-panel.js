@@ -674,6 +674,7 @@ class ESPHomeStudioPanel extends HTMLElement {
         h("button", { class: "primary", onClick: () => this._homeNew() }, "Neues Projekt"),
         h("button", { onClick: () => this._projFile.click() }, "Datei importieren"),
         h("button", { title: "Alle Geräte neu aus dem ESPHome Device Builder einlesen", onClick: () => this._syncOpen() }, "Aus Builder neu einlesen"),
+        h("button", { title: "secrets.yaml einmal ins Studio kopieren, damit Schlüssel und Passwörter beim Einlesen ergänzt werden", onClick: () => { this._secOpen = !this._secOpen; if (this._secOpen) this._loadStoreInfo(); else this._renderAll(); } }, "secrets.yaml einfügen"),
         this._projFile = h("input", { type: "file", accept: ".json,application/json", style: "display:none",
           onChange: async (e) => { await this._importProjectFile(e.target.files[0]); e.target.value = ""; } })),
       h("div", { class: "chips", style: "margin-top:10px" }, chip("all", "Alle"), chip("migrate", "Umstellung offen"),
@@ -695,7 +696,7 @@ class ESPHomeStudioPanel extends HTMLElement {
         h("button", { onClick: () => this._homeDuplicate(d.id) }, "Duplizieren"),
         data.builder_url ? h("a", { href: `${data.builder_url.replace(/\/+$/, "")}/device/${encodeURIComponent(d.file || d.name)}.yaml`, target: "_blank", rel: "noopener" }, h("button", {}, "Im Builder öffnen")) : null,
         h("button", { class: "danger", onClick: () => this._homeDelete(d) }, "Löschen"))));
-    return [this._sync ? this._secSync() : null, top,
+    return [this._secOpen ? h("div", { class: "card" }, h("h2", {}, "secrets.yaml einfügen"), this._storeBox()) : null, this._sync ? this._secSync() : null, top,
       list.length ? h("div", { class: "cards" }, cards) : h("div", { class: "card" }, "Keine Geräte gefunden.")].filter(Boolean);
   }
 
@@ -1010,7 +1011,7 @@ class ESPHomeStudioPanel extends HTMLElement {
     const ok = h("input", { type: "checkbox", checked: !!this._storeOk, onChange: (e) => { this._storeOk = e.target.checked; this._renderAll(); } });
     const save = h("button", { class: "primary", onClick: () => this._storeSave() }, "Im Secrets-Speicher sichern");
     if (!this._storeOk) save.disabled = true;
-    return h("details", { class: "field", open: !!this._storeOpen || undefined,
+    return h("details", { class: "field", open: !!this._storeOpen || !!this._secOpen || undefined,
       onToggle: (e) => { this._storeOpen = e.target.open; } },
       h("summary", {}, `${tx("Secrets-Speicher (optional, auf eigene Gefahr)")}${n ? ` · ${n} ${tx("Einträge")}` : ""}`),
       h("p", { class: "hint" }, "Hier kannst du deine ganze secrets.yaml einmal ablegen. Bei jedem Import werden die benutzten !secret-Werte daraus ergänzt, auch gemeinsame API-Schlüssel und Passwörter. Die Werte liegen im Klartext im Speicher von Home Assistant (.storage, also auch in Backups). Das Panel zeigt sie nie wieder an."),

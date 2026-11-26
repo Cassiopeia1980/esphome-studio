@@ -668,6 +668,10 @@ async def ws_source_import(hass, connection, msg):
             summary["changes"] = modernize(project)
         if msg.get("patch"):
             summary["patch_problems"] = apply_patch(project, msg["patch"])
+        if pid:
+            old_backup = (st["data"].get("sync_backup") or {}).get("projects") or {}
+            if keep_api_key(project, st["data"]["projects"][pid], old_backup.get(pid)):
+                summary["key_kept"] = True
         gen = generate(project, st["data"]["secrets"], lg)
         summary["warnings"] = gen.get("warnings", [])
         if not gen.get("ok"):
